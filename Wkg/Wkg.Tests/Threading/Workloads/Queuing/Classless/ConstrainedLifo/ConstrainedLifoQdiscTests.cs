@@ -51,7 +51,7 @@ public class ConstrainedLifoQdiscTests
     [TestMethod]
     public void TestEnqueueDequeue1()
     {
-        IClassifyingQdisc<int> qdisc = CreateDefaultQdisc(8);
+        using IClassifyingQdisc<int> qdisc = CreateDefaultQdisc(8);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
 
@@ -107,7 +107,7 @@ public class ConstrainedLifoQdiscTests
     [TestMethod]
     public void TestEnqueueDequeue2()
     {
-        IClassifyingQdisc<int> qdisc = CreateDefaultQdisc(4);
+        using IClassifyingQdisc<int> qdisc = CreateDefaultQdisc(4);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
 

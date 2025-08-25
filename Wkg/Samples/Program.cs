@@ -6,22 +6,16 @@
  * ================================================================================================== */
 
 using System.Diagnostics;
-using Wkg.Logging;
-using Wkg.Logging.Configuration;
-using Wkg.Logging.Generators;
-using Wkg.Logging.Sinks;
-using Wkg.Logging.Writers;
-using Wkg.Threading.Workloads;
-using Wkg.Threading.Workloads.Configuration;
-using Wkg.Threading.Workloads.DependencyInjection.Implementations;
-using Wkg.Threading.Workloads.Factories;
-using Wkg.Threading.Workloads.Queuing.Classful.FairQueuing;
-using Wkg.Threading.Workloads.Queuing.Classful.RoundRobin;
-using Wkg.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
-using Wkg.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
-using Wkg.Threading.Workloads.Queuing.Classless.Fifo;
-using Wkg.Threading.Workloads.Queuing.Classless.Lifo;
-using Wkg.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
+using Cash.Threading.Workloads;
+using Cash.Threading.Workloads.Configuration;
+using Cash.Threading.Workloads.DependencyInjection.Implementations;
+using Cash.Threading.Workloads.Factories;
+using Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
+using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
+using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
+using Cash.Threading.Workloads.Queuing.Classless.Fifo;
+using Cash.Threading.Workloads.Queuing.Classless.Lifo;
+using Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 
 //Stopwatch sw = Stopwatch.StartNew();
 //for (int i = 0; i < 1000; i++)
@@ -35,13 +29,6 @@ using Wkg.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 //BenchmarkRunner.Run<CashVsTpl>();
 //Console.ReadLine();
 //return;
-Log.UseConfiguration(LoggerConfiguration.Create()
-    //.AddSink<ColoredThreadBasedConsoleSink>()
-    .AddSink<ColoredConsoleSink>()
-    .SetMinimumLogLevel(LogLevel.Diagnostic)
-    .UseEntryGenerator(DetailedAotLogEntryGenerator.Create)
-    .RegisterMainThread(Thread.CurrentThread)
-    .UseDefaultLogWriter(LogWriter.Blocking));
 
 //Tests tests = new()
 //{
@@ -95,7 +82,7 @@ using (ClassfulWorkloadFactory<QdiscType> clubmappFactory = WorkloadFactoryBuild
     {
         Value = LOOPS
     };
-    ManualResetEventSlim mres = new(false);
+    using ManualResetEventSlim mres = new(false);
     for (int i = 0; i < LOOPS; i++)
     {
         clubmappFactory.Schedule(() =>
@@ -168,7 +155,7 @@ using ClassfulWorkloadFactoryWithDI<int> factory = WorkloadFactoryBuilder.Create
 
 factory.ScheduleAsync(1, flag => Log.WriteInfo("Hello from the root scheduler!")).ContinueWith(_ => Log.WriteInfo("Hello from the root scheduler again!"));
 
-List<int> myData = Enumerable.Range(0, 10000).ToList();
+List<int> myData = [.. Enumerable.Range(0, 10000)];
 int sum = myData.Sum();
 Log.WriteInfo($"Sum: {sum}");
 
@@ -183,7 +170,7 @@ int[] resultClassified = await factory.ClassifyAndTransformAllAsync(myData, (dat
 Log.WriteInfo($"Result Sum 2: {resultClassified.Select(i => (long)i).Sum()}");
 await Task.Delay(2500);
 
-CancellationTokenSource cts = new();
+using CancellationTokenSource cts = new();
 Workload workload = factory.ScheduleAsync(flag =>
 {
     Log.WriteInfo($"Hello from the root scheduler again");
@@ -192,7 +179,7 @@ Workload workload = factory.ScheduleAsync(flag =>
     Log.WriteFatal("I should not have gotten here.");
 }, cts.Token);
 
-cts.Cancel();
+await cts.CancelAsync();
 
 Workload wl2 = (Workload)await Workload.WhenAny(workload);
 
