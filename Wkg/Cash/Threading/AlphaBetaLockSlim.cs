@@ -512,8 +512,10 @@ public sealed class AlphaBetaLockSlim : IDisposable
     /// </summary>
     private void LazyCreateEvent([NotNull] ref EventWaitHandle? waitEvent, bool isAcquiringBetaLock)
     {
+#if DEBUG
         Debug.Assert(_spinLock.IsHeld);
         Debug.Assert(waitEvent == null);
+#endif
         _spinLock.Exit();
 
         EventWaitHandle newEvent = new(initialState: false, EventResetMode.ManualReset);

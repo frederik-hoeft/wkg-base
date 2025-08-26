@@ -2,7 +2,7 @@
 using Cash.Diagnostic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads.Queuing.VirtualTime;
 

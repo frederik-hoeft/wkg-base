@@ -1,4 +1,4 @@
-﻿namespace Cash.Threading.Workloads.Queuing.Classful.Classification;
+﻿namespace Cash.Threading.Workloads.Queuing.Classification;
 
 public interface IPredicateBuilder
 {

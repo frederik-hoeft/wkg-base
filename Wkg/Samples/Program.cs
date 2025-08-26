@@ -10,6 +10,9 @@ using Cash.Threading.Workloads;
 using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.DependencyInjection.Implementations;
 using Cash.Threading.Workloads.Factories;
+using Cash.Threading.Workloads.Configuration.Classful;
+using Cash.Threading.Workloads.Queuing.Classful;
+using Cash.Threading.Workloads.Queuing.Classful.Classification;
 using Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
@@ -77,7 +80,7 @@ using (ClassfulWorkloadFactory<QdiscType> clubmappFactory = WorkloadFactoryBuild
             .WithConstrainedPrioritizationOptions(ConstrainedPrioritizationOptions.MinimizeWorkloadCancellation)
             .WithCapacity(16))))
 {
-    const int LOOPS = 10_000_000;
+    const int LOOPS = 10_000;
     SharedInt sharedInt = new()
     {
         Value = LOOPS
@@ -113,6 +116,20 @@ using (ClassfulWorkloadFactory<QdiscType> clubmappFactory = WorkloadFactoryBuild
     });
 }
 
+using ClassfulWorkloadFactory<int> test = WorkloadFactoryBuilder.Create<int>()
+    .UseMaximumConcurrency(1)
+    .UseAnonymousWorkloadPooling(poolSize: 16)
+    .UseClassfulRoot<RoundRobin>(1, static root => root
+        .AddClasslessChild<Fifo>(2, static builder => builder.AddPredicate<int>(i => (i & 1) == 0))
+        .AddClasslessChild<Lifo>(3, static builder => builder.AddPredicate<int>(i => (i & 1) == 1)));
+
+ValueTask foo = test.ClassifyAllAsync(Enumerable.Range(0, 100), static async (data, flag) =>
+{
+    Log.WriteInfo(data.ToString());
+    await Task.Delay(100);
+});
+await foo;
+return;
 using ClassfulWorkloadFactoryWithDI<int> factory = WorkloadFactoryBuilder.Create<int>()
     .UseMaximumConcurrency(2)
     .FlowExecutionContextToContinuations()
@@ -121,16 +138,11 @@ using ClassfulWorkloadFactoryWithDI<int> factory = WorkloadFactoryBuilder.Create
         .AddService<IMyService, MyService>(() => new MyService())
         .AddService(() => new MyService()))
     .UseAnonymousWorkloadPooling(poolSize: 64)
-    .UseClassfulRoot<GeneralizedFairQueuing<int>>(1, root => root
-        .WithClassificationPredicate(o => o is State state && state.QdiscType == QdiscType.RoundRobin)
-        .WithLocalQueue<Fifo>()
-        .AssumeMaximimNumberOfDistinctPayloads(16)
-        .PreferFairness(PreferredFairness.LongTerm)
-        .SetMeasurementSampleLimit(1000)
-        .UsePreciseMeasurements(true)
-        .UseSchedulerTimeModel(VirtualTimeModel.Average)
-        .UseExecutionTimeModel(VirtualTimeModel.Average)
-        .AddClasslessChild<PriorityFifoFast>(1000, 1d, 1d, classifier =>
+    .UseClassfulRoot<RoundRobin>(1, root => root
+        .ConfigureClassificationPredicates(static builder => builder.AddPredicate<State>(o => o.QdiscType is QdiscType.RoundRobin))
+        .ConfigureQdisc(roundRobin => roundRobin.WithLocalQueue<Fifo>())
+        .AddClasslessChild<PriorityFifoFast>(3, foo => { }, bar => { })
+        .AddClasslessChild<PriorityFifoFast>(1000, classifier =>
             classifier.AddPredicate<long>(l => true),
             child => child
                 .WithBandCount(4)
@@ -143,11 +155,11 @@ using ClassfulWorkloadFactoryWithDI<int> factory = WorkloadFactoryBuilder.Create
                     long and < 1000 => 2,
                     _ => -1
                 }))
-        .AddClasslessChild<Fifo>(2, workloadSchedulingWeight: 2d, executionPunishmentFactor: 2d, classifier => classifier
+        .AddClasslessChild<Fifo>(2, classifier => classifier
             .AddPredicate<State>(state => state.QdiscType == QdiscType.Fifo)
             .AddPredicate<int>(i => (i & 1) == 0))
         .AddClasslessChild<Lifo>(14)
-        .AddClasslessChild<Lifo>(7, workloadSchedulingWeight: 0.5d, executionPunishmentFactor: 0.5d, classifier => classifier
+        .AddClasslessChild<Lifo>(7, classifier => classifier
             .AddPredicate<State>(state => state.QdiscType == QdiscType.Lifo)
             .AddPredicate<int>(i => (i & 1) == 1))
         .AddClasslessChild<ConstrainedFifo>(8, qdisc => qdisc
@@ -437,3 +449,30 @@ internal record MotorRpmReading(int MotorId, int Rpm)
 }
 
 internal record GyroReading(float X, float Y, float Z);
+
+file static class Log
+{
+    private static readonly Lock s_lock = new();
+
+    private static void LogCore(string message)
+    {
+        lock (s_lock)
+        {
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
+        }
+    }
+
+    public static void WriteInfo(string message) => LogCore($"[INFO] {message}");
+
+    public static void WriteWarning(string message) => LogCore($"[WARN] {message}");
+
+    public static void WriteError(string message) => LogCore($"[ERROR] {message}");
+
+    public static void WriteFatal(string message) => LogCore($"[FATAL] {message}");
+
+    public static void WriteDebug(string message) => LogCore($"[DEBUG] {message}");
+
+    public static void WriteDiagnostic(string message) => LogCore($"[DIAG] {message}");
+
+    public static void WriteEvent(string message) => LogCore($"[EVENT] {message}");
+}

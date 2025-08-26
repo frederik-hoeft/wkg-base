@@ -1,4 +1,6 @@
-﻿using Cash.Threading.Workloads.Queuing.Routing;
+﻿using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Queuing.Routing;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Cash.Threading.Workloads.Queuing.Classless;
 
@@ -15,6 +17,8 @@ public interface IClassifyingQdisc : IQdisc
     internal INotifyWorkScheduled ParentScheduler { get; }
 
     internal bool IsCompleted { get; }
+
+    IFilterManager Filters { get; }
 
     /// <summary>
     /// Enqueues the workload to be executed onto this qdisc.
@@ -43,14 +47,6 @@ public interface IClassifyingQdisc : IQdisc
     /// This allows child qdiscs to override the classification of their parents and allows children to be more restrictive than their parents.
     /// </remarks>
     internal bool TryEnqueue(object? state, AbstractWorkloadBase workload);
-
-    /// <summary>
-    /// Attempts to classify the workload and enqueue it to the qdisc itself.
-    /// </summary>
-    /// <param name="state">The state to classify.</param>
-    /// <param name="workload">The workload to enqueue.</param>
-    /// <returns><see langword="true"/> if the workload was enqueued, <see langword="false"/> if the workload was not enqueued.</returns>
-    internal bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload);
 
     internal void AssertNotCompleted();
 }
@@ -113,8 +109,9 @@ public interface IClassifyingQdisc<THandle> : IClassifyingQdisc, IQdisc<THandle>
     /// <returns><see langword="true"/> if the child was found, <see langword="false"/> if the child was not found.</returns>
     /// <remarks>
     /// Qdiscs should only check their children, not their own handle. Checking the qdisc's own handle is the responsibility of the caller. This optimization avoids unnecessary recursion.<br/>
-    /// If the qdisc has no children, it should return <see langword="false"/>.<br/>
-    /// 
+    /// If the qdisc has no children, it should return <see langword="false"/>.
     /// </remarks>
-    internal bool ContainsChild(THandle handle);
+    bool ContainsChild(THandle handle);
+
+    bool TryGetChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
 }

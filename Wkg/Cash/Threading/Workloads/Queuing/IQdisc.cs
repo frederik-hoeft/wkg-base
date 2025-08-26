@@ -65,7 +65,7 @@ public interface IQdisc : IDisposable
     /// The qdisc should use this method to remove any references to the worker thread from its internal state.
     /// Classful qdiscs should forward this method to all child qdiscs.
     /// </remarks>
-    public void OnWorkerTerminated(int workerId);
+    void OnWorkerTerminated(int workerId);
 
     /// <summary>
     /// Attempts to remove the specified workload from this qdisc.
@@ -74,7 +74,7 @@ public interface IQdisc : IDisposable
     /// <returns><see langword="true"/> if the workload was removed; <see langword="false"/> if the workload could not be found or the qdisc does not support removal of workloads.</returns>
     internal bool TryRemoveInternal(AwaitableWorkload workload);
 
-    // TODO: add a clear method to remove all workloads from the qdisc and be able to reschedule them (e.g. when a child qdisc is removed)
+    internal IEnumerable<AbstractWorkloadBase> Clear();
 }
 
 /// <summary>
@@ -86,5 +86,5 @@ public interface IQdisc<THandle> : IQdisc where THandle : unmanaged
     /// <summary>
     /// A handle uniquely identifying this qdisc.
     /// </summary>
-    public ref readonly THandle Handle { get; }
+    ref readonly THandle Handle { get; }
 }

@@ -1,9 +1,7 @@
 ﻿using Cash.Diagnostic;
-using Cash.Threading;
-using Cash.Threading.Workloads;
 using Cash.Threading.Workloads.Continuations;
 
-namespace Wkg.Threading.Workloads;
+namespace Cash.Threading.Workloads;
 
 using CommonFlags = WorkloadStatus.CommonFlags;
 

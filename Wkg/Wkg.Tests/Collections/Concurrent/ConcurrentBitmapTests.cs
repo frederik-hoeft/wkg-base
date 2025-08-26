@@ -1,13 +1,13 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Collections.Concurrent;
-using Wkg.Tests;
+using Cash.Collections.Concurrent;
+using Cash.Tests;
 
-namespace Wkg.Tests.Collections.Concurrent;
+namespace Cash.Tests.Collections.Concurrent;
 
 using static ConcurrentBitmap;
 
 [TestClass]
-public class ConcurrentBitmapTests : BaseTest
+public class ConcurrentBitmapTests
 {
     [TestMethod]
     public void ConcurrentBitmapTestSingleSegment()

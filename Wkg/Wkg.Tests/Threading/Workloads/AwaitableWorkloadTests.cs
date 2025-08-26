@@ -1,13 +1,13 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Threading.Workloads.Factories;
-using Wkg.Threading.Workloads.Configuration;
-using Wkg.Threading.Workloads.Queuing.Classless.Fifo;
+using Cash.Threading.Workloads.Factories;
+using Cash.Threading.Workloads.Configuration;
+using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 using System.Diagnostics;
-using Wkg.Threading.Workloads.Scheduling;
-using Wkg.Threading.Workloads.Exceptions;
-using Wkg.Threading.Workloads;
+using Cash.Threading.Workloads.Scheduling;
+using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads;
 
-namespace Wkg.Tests.Threading.Workloads;
+namespace Cash.Tests.Threading.Workloads;
 
 [TestClass]
 public class AwaitableWorkloadTests

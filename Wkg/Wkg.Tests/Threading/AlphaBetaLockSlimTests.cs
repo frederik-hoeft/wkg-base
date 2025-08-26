@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Threading;
+using Cash.Threading;
 
-namespace Wkg.Tests.Threading;
+namespace Cash.Tests.Threading;
 
 [TestClass]
 public class AlphaBetaLockSlimTests

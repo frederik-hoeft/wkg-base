@@ -1,7 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Common.Extensions;
+using Cash.Common.Extensions;
 
-namespace Wkg.Tests.Extensions.Common;
+namespace Cash.Tests.Extensions.Common;
 
 [TestClass]
 public class NullableValueTypeExtensionsTests

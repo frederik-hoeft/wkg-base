@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Wkg.Common.ThrowHelpers;
+namespace Cash.Common.ThrowHelpers;
 
 using AOORE = ArgumentOutOfRangeException;
 

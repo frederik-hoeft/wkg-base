@@ -1,14 +1,14 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Common.Extensions;
-using Wkg.Threading.Workloads;
-using Wkg.Threading.Workloads.Configuration;
-using Wkg.Threading.Workloads.Configuration.Classless;
-using Wkg.Threading.Workloads.Queuing.Classless;
-using Wkg.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
-using Wkg.Threading.Workloads.WorkloadTypes;
-using CL = Wkg.Threading.Workloads.Queuing.Classless.ConstrainedLifo.ConstrainedLifo;
+using Cash.Common.Extensions;
+using Cash.Threading.Workloads;
+using Cash.Threading.Workloads.Configuration;
+using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classless;
+using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
+using Cash.Threading.Workloads.WorkloadTypes;
+using CL = Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo.ConstrainedLifo;
 
-namespace Wkg.Tests.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
+namespace Cash.Tests.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 
 [TestClass]
 public class ConstrainedLifoQdiscTests

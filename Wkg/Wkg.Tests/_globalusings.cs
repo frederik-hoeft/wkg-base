@@ -1,1 +1,1 @@
-﻿global using static Wkg.Common.SyntacticSugar;
+﻿global using static Cash.Common.SyntacticSugar;

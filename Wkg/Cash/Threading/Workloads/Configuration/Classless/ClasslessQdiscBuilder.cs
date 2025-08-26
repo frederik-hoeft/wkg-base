@@ -1,5 +1,5 @@
 ﻿using Cash.Threading.Workloads.Queuing.Classless;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads.Configuration.Classless;
 

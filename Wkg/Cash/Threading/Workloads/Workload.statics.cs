@@ -1,10 +1,8 @@
-﻿using Cash.Threading;
-using Cash.Threading.Workloads;
-using Cash.Threading.Workloads.Continuations;
+﻿using Cash.Threading.Workloads.Continuations;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace Wkg.Threading.Workloads;
+namespace Cash.Threading.Workloads;
 
 public partial class Workload
 {

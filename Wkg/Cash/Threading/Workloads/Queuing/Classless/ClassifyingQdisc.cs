@@ -4,7 +4,8 @@ using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Text;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless;
 
@@ -17,16 +18,13 @@ namespace Cash.Threading.Workloads.Queuing.Classless;
 /// </remarks>
 /// <param name="handle">The handle uniquely identifying this qdisc in this scheduling hierarchy.</param>
 /// <param name="predicate">The predicate that determines whether a workload with a given state can be enqueued into this qdisc, or <see langword="null"/> to match nothing by default.</param>
-public abstract class ClassifyingQdisc<THandle>(THandle handle, Predicate<object?>? predicate) : IClassifyingQdisc<THandle> where THandle : unmanaged
+public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager filters) : IClassifyingQdisc<THandle> where THandle : unmanaged
 {
     private readonly THandle _handle = handle;
     private INotifyWorkScheduled _parentScheduler = NotifyWorkScheduledSentinel.Uninitialized;
     private protected bool _disposedValue;
 
-    /// <summary>
-    /// The predicate that determines whether a workload can be enqueued into this qdisc.
-    /// </summary>
-    protected Predicate<object?> Predicate { get; } = predicate ?? MatchNothingPredicate;
+    public IFilterManager Filters { get; } = filters;
 
     /// <summary>
     /// The parent scheduler of this qdisc.
@@ -139,26 +137,29 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, Predicate<object
 
     #region IClassifyingQdisc / IClassifyingQdisc<THandle> implementation
 
-    /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryEnqueueByHandle(THandle, AbstractWorkloadBase)"/>"
+    /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryEnqueueByHandle(THandle, AbstractWorkloadBase)"/>
     protected abstract bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload);
 
-    /// <inheritdoc cref="IClassifyingQdisc{THandle}.WillEnqueueFromRoutingPath(ref readonly RoutingPathNode{THandle}, AbstractWorkloadBase)"/>"
+    /// <inheritdoc cref="IClassifyingQdisc{THandle}.WillEnqueueFromRoutingPath(ref readonly RoutingPathNode{THandle}, AbstractWorkloadBase)"/>
     protected virtual void WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => Pass();
 
-    /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryFindRoute(THandle, ref RoutingPath{THandle})"/>"
+    /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryFindRoute(THandle, ref RoutingPath{THandle})"/>
     protected abstract bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path);
 
-    /// <inheritdoc cref="IClassifyingQdisc{THandle}.ContainsChild(THandle)"/>"
+    /// <inheritdoc cref="IClassifyingQdisc{THandle}.ContainsChild(THandle)"/>
     protected abstract bool ContainsChild(THandle handle);
 
-    /// <inheritdoc cref="IClassifyingQdisc.CanClassify(object?)"/>"
+    /// <inheritdoc cref="IClassifyingQdisc.CanClassify(object?)"/>
     protected abstract bool CanClassify(object? state);
 
-    /// <inheritdoc cref="IClassifyingQdisc.TryEnqueue(object?, AbstractWorkloadBase)"/>"
+    /// <inheritdoc cref="IClassifyingQdisc.TryEnqueue(object?, AbstractWorkloadBase)"/>
     protected abstract bool TryEnqueue(object? state, AbstractWorkloadBase workload);
 
-    /// <inheritdoc cref="IClassifyingQdisc.TryEnqueueDirect(object?, AbstractWorkloadBase)"/>"
+    /// <inheritdoc cref="IClassifyingQdisc.TryEnqueueDirect(object?, AbstractWorkloadBase)"/>
     protected abstract bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload);
+
+    /// <inheritdoc cref="IQdisc.Clear()"/>
+    protected abstract IEnumerable<AbstractWorkloadBase> Clear();
 
     bool IClassifyingQdisc<THandle>.TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => TryEnqueueByHandle(handle, workload);
     void IClassifyingQdisc<THandle>.WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => WillEnqueueFromRoutingPath(in routingPathNode, workload);
@@ -167,6 +168,7 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, Predicate<object
     bool IClassifyingQdisc.CanClassify(object? state) => CanClassify(state);
     bool IClassifyingQdisc.TryEnqueue(object? state, AbstractWorkloadBase workload) => TryEnqueue(state, workload);
     bool IClassifyingQdisc.TryEnqueueDirect(object? state, AbstractWorkloadBase workload) => TryEnqueueDirect(state, workload);
+    IEnumerable<AbstractWorkloadBase> IQdisc.Clear() => Clear();
 
     #endregion IClassifyingQdisc / IClassifyingQdisc<THandle> implementation
 
@@ -250,4 +252,6 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, Predicate<object
             classlessQdisc.ChildrenToTreeString(builder, currentIndent + 1);
         }
     }
+
+    public abstract bool TryGetChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
 }

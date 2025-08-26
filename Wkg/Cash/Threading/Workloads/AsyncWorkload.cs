@@ -1,6 +1,6 @@
 ﻿using Cash.Diagnostic;
 using Cash.Threading.Workloads.Exceptions;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads;
 

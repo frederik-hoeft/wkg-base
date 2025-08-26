@@ -2,7 +2,7 @@
 using Cash.Threading.Workloads.DependencyInjection;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.WorkloadTypes;
-using Wkg.Threading.Workloads;
+using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads.Factories;
 

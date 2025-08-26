@@ -1,8 +1,8 @@
 ﻿using Cash.Diagnostic;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.WorkloadTypes;
-using Wkg.Threading.Workloads;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads;
+using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads.Factories;
 
@@ -425,7 +425,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
 
     private protected virtual void ClassifyCore<TState>(TState state, AbstractWorkloadBase workload)
     {
-        if (!RootRef.TryEnqueue(state, workload) && !RootRef.TryEnqueueDirect(state, workload))
+        if (!RootRef.TryEnqueue(state, workload))
         {
             WorkloadSchedulingException.ThrowClassificationFailed(state);
         }

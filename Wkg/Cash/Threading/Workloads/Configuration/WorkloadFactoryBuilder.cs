@@ -1,4 +1,4 @@
-﻿using Cash.Threading.Workloads.Queuing.Classful.Classification;
+﻿using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Configuration;
 

@@ -1,10 +1,10 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Threading.Workloads.Factories;
-using Wkg.Threading.Workloads.Configuration;
-using Wkg.Common.Extensions;
-using Wkg.Threading.Workloads.Queuing.Classless.Fifo;
+using Cash.Threading.Workloads.Factories;
+using Cash.Threading.Workloads.Configuration;
+using Cash.Common.Extensions;
+using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 
-namespace Wkg.Tests.Threading.Workloads;
+namespace Cash.Tests.Threading.Workloads;
 
 [TestClass]
 public class WorkloadSynchronizationContextTests

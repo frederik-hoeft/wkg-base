@@ -1,8 +1,8 @@
-﻿namespace Cash.Threading.Workloads.Queuing.Classful.Classification;
+﻿namespace Cash.Threading.Workloads.Queuing.Classification;
 
 public class SimplePredicateBuilder : IPredicateBuilder
 {
-    private readonly List<IPredicate> _predicates = [];
+    private readonly List<IFilter> _predicates = [];
 
     public SimplePredicateBuilder AddPredicate<TState>(Predicate<TState> predicate)
     {
@@ -13,19 +13,19 @@ public class SimplePredicateBuilder : IPredicateBuilder
     public Predicate<object?>? Compile() => _predicates.Count switch
     {
         0 => null,
-        1 => new Predicate<object?>(_predicates[0].Invoke),
-        _ => new Predicate<object?>(new CompiledPredicates(this).Invoke),
+        1 => new Predicate<object?>(_predicates[0].Match),
+        _ => new Predicate<object?>(new CompiledPredicates(this).Match),
     };
 
-    private sealed class CompiledPredicates(SimplePredicateBuilder predicates) : IPredicate
+    private sealed class CompiledPredicates(SimplePredicateBuilder predicates) : IFilter
     {
-        private readonly IPredicate[] _predicates = [.. predicates._predicates];
+        private readonly IFilter[] _predicates = [.. predicates._predicates];
 
-        public bool Invoke(object? state)
+        public bool Match(object? state)
         {
             for (int i = 0; i < _predicates.Length; i++)
             {
-                if (_predicates[i].Invoke(state))
+                if (_predicates[i].Match(state))
                 {
                     return true;
                 }

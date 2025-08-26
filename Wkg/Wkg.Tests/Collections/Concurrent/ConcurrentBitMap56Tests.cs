@@ -1,8 +1,8 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Runtime.CompilerServices;
-using Wkg.Collections.Concurrent;
+using Cash.Collections.Concurrent;
 
-namespace Wkg.Tests.Collections.Concurrent;
+namespace Cash.Tests.Collections.Concurrent;
 
 [TestClass]
 public class ConcurrentBitmap56Tests

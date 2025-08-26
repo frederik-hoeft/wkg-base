@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
-using Wkg.Threading.Workloads;
+using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads.Scheduling;
 

@@ -8,9 +8,9 @@ using Cash.Threading.Workloads.Configuration.Classful;
 using Cash.Threading.Workloads.Queuing.Classful;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.DependencyInjection;
-using Cash.Threading.Workloads.Queuing.Classful.Classification;
 using Cash.Threading.Workloads.WorkloadTypes;
 using Cash.Common.Extensions;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Configuration;
 

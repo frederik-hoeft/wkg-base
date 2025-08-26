@@ -1,12 +1,12 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Wkg.Threading.Workloads;
-using Wkg.Threading.Workloads.Configuration;
-using Wkg.Threading.Workloads.DependencyInjection;
-using Wkg.Threading.Workloads.DependencyInjection.Implementations;
-using Wkg.Threading.Workloads.Factories;
-using Wkg.Threading.Workloads.Queuing.Classless.Fifo;
+using Cash.Threading.Workloads;
+using Cash.Threading.Workloads.Configuration;
+using Cash.Threading.Workloads.DependencyInjection;
+using Cash.Threading.Workloads.DependencyInjection.Implementations;
+using Cash.Threading.Workloads.Factories;
+using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 
-namespace Wkg.Tests.Threading.Workloads;
+namespace Cash.Tests.Threading.Workloads;
 
 [TestClass]
 public class WorkloadServiceProviderTests

@@ -1,7 +1,7 @@
 ﻿using Cash.Diagnostic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using Wkg.Threading.Workloads;
+using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads;
 

@@ -60,15 +60,17 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
     {
         lock (_syncRoot)
         {
-            if (_localLasts[workerId] is not null && _localLasts[workerId]!.TryDequeueInternal(workerId, backTrack, out workload))
+            if (backTrack && _localLasts[workerId] is not null && _localLasts[workerId]!.TryDequeueInternal(workerId, backTrack, out workload))
             {
                 return true;
             }
             for (int i = 0; i < _children.Length; i++, _rrIndex = (_rrIndex + 1) % _children.Length)
             {
-                if (_children[i].TryDequeueInternal(workerId, backTrack, out workload))
+                IClassifyingQdisc<THandle> child = _children[_rrIndex];
+                if (child.TryDequeueInternal(workerId, backTrack, out workload))
                 {
-                    _localLasts[workerId] = _children[i];
+                    _localLasts[workerId] = child;
+                    _rrIndex = (_rrIndex + 1) % _children.Length;
                     return true;
                 }
             }

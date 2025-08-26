@@ -5,7 +5,7 @@ using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Wkg.Common.ThrowHelpers;
+using Cash.Common.ThrowHelpers;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 

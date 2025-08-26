@@ -7,7 +7,7 @@ using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.PrioFast;
 
@@ -151,10 +151,10 @@ internal sealed class PrioFastBitmapQdisc<THandle> : ClassfulQdisc<THandle>, ICl
 
     protected override bool CanClassify(object? state)
     {
-        if (Predicate.Invoke(state))
+        if (!Filters.Match(state))
         {
-            // fast path, we can enqueue directly to the local queue
-            return true;
+            // fast path, we can't classify the workload
+            return false;
         }
 
         IClassifyingQdisc<THandle>[] children = _children;
@@ -224,6 +224,11 @@ internal sealed class PrioFastBitmapQdisc<THandle> : ClassfulQdisc<THandle>, ICl
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
         DebugLog.WriteDiagnostic($"Trying to enqueue workload {workload} to round robin qdisc {this}.");
+        if (!Filters.Match(state))
+        {
+            DebugLog.WriteDiagnostic($"{this}: cannot classify workload {workload}, as it does not match the filter.");
+            return false;
+        }
 
         // only lock the children array while we need to access it
         IClassifyingQdisc<THandle>[] children = _children;
@@ -245,7 +250,8 @@ internal sealed class PrioFastBitmapQdisc<THandle> : ClassfulQdisc<THandle>, ICl
                 return true;
             }
         }
-        return TryEnqueueDirect(state, workload);
+        EnqueueDirect(workload);
+        return true;
     }
 
     [DoesNotReturn]
@@ -284,16 +290,6 @@ internal sealed class PrioFastBitmapQdisc<THandle> : ClassfulQdisc<THandle>, ICl
         int index = routingPathNode.Offset;
         _th_lastEnqueuedChildIndex.Value = index;
         DebugLog.WriteDiagnostic($"{this}: expecting to enqueue workload {workload} to child {_children[index]} via routing path.");
-    }
-
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload)
-    {
-        if (Predicate.Invoke(state))
-        {
-            EnqueueDirect(workload);
-            return true;
-        }
-        return false;
     }
 
     protected override void EnqueueDirect(AbstractWorkloadBase workload)

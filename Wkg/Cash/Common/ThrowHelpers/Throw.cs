@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 
-namespace Wkg.Common.ThrowHelpers;
+namespace Cash.Common.ThrowHelpers;
 
 /// <summary>
 /// Complements the static throw helpers introduced in .NET 8 for many exception types.

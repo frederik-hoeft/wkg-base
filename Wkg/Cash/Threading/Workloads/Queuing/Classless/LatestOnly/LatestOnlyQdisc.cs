@@ -1,7 +1,7 @@
 ﻿using Cash.Diagnostic;
 using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics.CodeAnalysis;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.LatestOnly;
 

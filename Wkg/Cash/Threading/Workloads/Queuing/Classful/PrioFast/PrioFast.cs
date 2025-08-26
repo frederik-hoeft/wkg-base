@@ -2,7 +2,7 @@
 using Cash.Threading.Workloads.Configuration.Classful;
 using Cash.Threading.Workloads.Configuration.Classful.Custom;
 using Cash.Threading.Workloads.Configuration.Classless;
-using Cash.Threading.Workloads.Queuing.Classful.Classification;
+using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 

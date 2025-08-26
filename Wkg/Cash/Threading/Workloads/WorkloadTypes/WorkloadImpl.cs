@@ -1,4 +1,4 @@
-﻿using Wkg.Threading.Workloads;
+﻿using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads.WorkloadTypes;
 

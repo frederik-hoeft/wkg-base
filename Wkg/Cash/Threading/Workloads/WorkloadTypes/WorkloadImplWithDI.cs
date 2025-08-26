@@ -1,6 +1,6 @@
 ﻿using Cash.Threading.Workloads.DependencyInjection;
 using System.Diagnostics;
-using Wkg.Threading.Workloads;
+using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads.WorkloadTypes;
 

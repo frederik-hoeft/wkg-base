@@ -1,7 +1,7 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
-using Wkg.Common.ThrowHelpers;
+using Cash.Common.ThrowHelpers;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 

@@ -1,5 +1,5 @@
 ﻿using System.Diagnostics;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Continuations;
 using Cash.Threading.Workloads.Queuing;
 using Cash.Threading.Workloads.DependencyInjection;
@@ -12,7 +12,7 @@ using CommonFlags = WorkloadStatus.CommonFlags;
 /// <summary>
 /// Represents an asynchronous workload that can be scheduled for execution.
 /// </summary>
-[DebuggerDisplay("{" + nameof(ToString) + "(),nq}")]
+[DebuggerDisplay($"{{{nameof(ToString)}(),nq}}")]
 public abstract class AbstractWorkloadBase
 {
     private protected uint _status;

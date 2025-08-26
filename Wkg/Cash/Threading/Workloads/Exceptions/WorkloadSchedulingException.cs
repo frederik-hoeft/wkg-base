@@ -1,4 +1,4 @@
-﻿namespace Wkg.Threading.Workloads.Exceptions;
+﻿namespace Cash.Threading.Workloads.Exceptions;
 
 /// <summary>
 /// The exception that is thrown when an unexpected state or condition occurs in the workload scheduling system.

@@ -1,6 +1,6 @@
 ﻿using Cash.Threading.Workloads.DependencyInjection;
 using Cash.Threading.Workloads.Exceptions;
-using Wkg.Threading.Workloads;
+using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads.Factories;
 
@@ -132,6 +132,14 @@ public static class WorkloadFactoryExtensions
         where THandle : unmanaged =>
         Workload.WhenAll(states.Select(state => factory.ClassifyAsync(state, consumer, cancellationToken)));
 
+    public static ValueTask ClassifyAllAsync<THandle, TState>(this AbstractClasslessWorkloadFactory<THandle> factory, IEnumerable<TState> states, Func<TState, CancellationFlag, Task> asyncConsumer)
+        where THandle : unmanaged =>
+        Workload.WhenAll(states.Select(state => factory.ClassifyTaskAsync(state, asyncConsumer)));
+
+    public static ValueTask ClassifyAllAsync<THandle, TState>(this AbstractClasslessWorkloadFactory<THandle> factory, IEnumerable<TState> states, Func<TState, CancellationFlag, Task> asyncConsumer, CancellationToken cancellationToken)
+        where THandle : unmanaged =>
+        Workload.WhenAll(states.Select(state => factory.ClassifyTaskAsync(state, asyncConsumer, cancellationToken)));
+
     public static ValueTask ClassifyAllAsync<THandle, TState>(this AbstractClasslessWorkloadFactoryWithDI<THandle> factory, IEnumerable<TState> states, Action<TState, IWorkloadServiceProvider, CancellationFlag> consumer)
         where THandle : unmanaged =>
         Workload.WhenAll(states.Select(state => factory.ClassifyAsync(state, consumer)));
@@ -139,6 +147,14 @@ public static class WorkloadFactoryExtensions
     public static ValueTask ClassifyAllAsync<THandle, TState>(this AbstractClasslessWorkloadFactoryWithDI<THandle> factory, IEnumerable<TState> states, Action<TState, IWorkloadServiceProvider, CancellationFlag> consumer, CancellationToken cancellationToken)
         where THandle : unmanaged =>
         Workload.WhenAll(states.Select(state => factory.ClassifyAsync(state, consumer, cancellationToken)));
+
+    public static ValueTask ClassifyAllAsync<THandle, TState>(this AbstractClasslessWorkloadFactoryWithDI<THandle> factory, IEnumerable<TState> states, Func<TState, CancellationFlag, Task> asyncConsumer)
+        where THandle : unmanaged =>
+        Workload.WhenAll(states.Select(state => factory.ClassifyTaskAsync(state, asyncConsumer)));
+
+    public static ValueTask ClassifyAllAsync<THandle, TState>(this AbstractClasslessWorkloadFactoryWithDI<THandle> factory, IEnumerable<TState> states, Func<TState, CancellationFlag, Task> asyncConsumer, CancellationToken cancellationToken)
+        where THandle : unmanaged =>
+        Workload.WhenAll(states.Select(state => factory.ClassifyTaskAsync(state, asyncConsumer, cancellationToken)));
 
     public static Task<TResult[]> ClassifyAndTransformAllAsync<THandle, TState, TResult>(this AbstractClasslessWorkloadFactory<THandle> factory, IEnumerable<TState> states, Func<TState, CancellationFlag, TResult> transformation)
         where THandle : unmanaged =>

@@ -1,5 +1,6 @@
 ﻿using Cash.Diagnostic;
-using Wkg.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless;
 
@@ -11,9 +12,8 @@ namespace Cash.Threading.Workloads.Queuing.Classless;
 /// Initializes a new instance of the <see cref="ClasslessQdisc{THandle}"/> class.
 /// </remarks>
 /// <param name="handle">The handle of the qdisc.</param>
-/// <param name="predicate">The predicate used to determine if a workload can be scheduled.</param>
-public abstract class ClasslessQdisc<THandle>(THandle handle, Predicate<object?>? predicate) 
-    : ClassifyingQdisc<THandle>(handle, predicate) where THandle : unmanaged
+public abstract class ClasslessQdisc<THandle>(THandle handle, IFilterManager filters) 
+    : ClassifyingQdisc<THandle>(handle, filters) where THandle : unmanaged
 {
 
     /// <summary>

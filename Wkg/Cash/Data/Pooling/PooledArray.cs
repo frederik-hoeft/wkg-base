@@ -1,5 +1,5 @@
 ﻿using System.Diagnostics;
-using Wkg.Common.ThrowHelpers;
+using Cash.Common.ThrowHelpers;
 
 namespace Cash.Data.Pooling;
 
