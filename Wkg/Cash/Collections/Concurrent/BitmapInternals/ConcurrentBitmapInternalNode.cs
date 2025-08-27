@@ -7,7 +7,7 @@ namespace Cash.Collections.Concurrent.BitmapInternals;
 
 using static ConcurrentBitmap;
 
-internal class ConcurrentBitmapInternalNode : ConcurrentBitmapNode
+internal sealed class ConcurrentBitmapInternalNode : ConcurrentBitmapNode
 {
     // each node must track the fullness and emptiness of its clusters, so 2 bits are required per cluster
     // bits 0 to 27 are used for the cluster emptiness state,

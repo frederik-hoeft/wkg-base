@@ -6,7 +6,7 @@ using Cash.Common;
 
 namespace Cash.Collections.Concurrent.BitmapInternals;
 
-internal class ConcurrentBitmapClusterNode : ConcurrentBitmapNode, IDisposable
+internal sealed class ConcurrentBitmapClusterNode : ConcurrentBitmapNode, IDisposable
 {
     // each cluster must track the fullness and emptiness of its segments, so 2 bits are required per segment
     // bits 0 to 27 are used for the segment emptiness state,
@@ -415,7 +415,7 @@ internal class ConcurrentBitmapClusterNode : ConcurrentBitmapNode, IDisposable
         }
     }
 
-    protected virtual void Dispose(bool disposing)
+    private void Dispose(bool disposing)
     {
         if (!_disposedValue)
         {

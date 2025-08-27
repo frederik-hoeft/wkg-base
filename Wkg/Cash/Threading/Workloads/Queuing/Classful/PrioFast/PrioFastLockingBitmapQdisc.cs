@@ -1,6 +1,7 @@
 ﻿using Cash.Common.Extensions;
 using Cash.Diagnostic;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Routing;
 using System.Collections;
@@ -22,9 +23,10 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
     private readonly IClassifyingQdisc<THandle> _localQueue;
     private readonly IClassifyingQdisc<THandle>[] _children;
 
-    public PrioFastLockingBitmapQdisc(THandle handle, Predicate<object?>? predicate, IClasslessQdiscBuilder localQueueBuilder, IClassifyingQdisc<THandle>[] children, int maxConcurrency) : base(handle, predicate)
+    public PrioFastLockingBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, IClassifyingQdisc<THandle>[] children, int maxConcurrency) 
+        : base(handle, filters)
     {
-        _localQueue = localQueueBuilder.BuildUnsafe(default(THandle), MatchNothingPredicate);
+        _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
         _localLasts = new IQdisc[maxConcurrency];
         foreach (IClassifyingQdisc<THandle> child in children)
         {
@@ -137,10 +139,10 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
 
     protected override bool CanClassify(object? state)
     {
-        if (Predicate.Invoke(state))
+        if (!Filters.Match(state))
         {
-            // fast path, we can enqueue directly to the local queue
-            return true;
+            // fast path, we can't classify this state
+            return false;
         }
 
         for (int i = 0; i < _children.Length; i++)
@@ -183,6 +185,11 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
         DebugLog.WriteDiagnostic($"Trying to enqueue workload {workload} to round robin qdisc {this}.");
+        if (!Filters.Match(state))
+        {
+            DebugLog.WriteDiagnostic($"{this}: cannot classify workload {workload} with state {state}, predicate does not match.");
+            return false;
+        }
 
         lock (_syncRoot)
         {
@@ -195,7 +202,8 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
                     return true;
                 }
             }
-            return TryEnqueueDirect(state, workload);
+            EnqueueDirect(workload);
+            return true;
         }
     }
 
@@ -221,16 +229,6 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
         }
     }
 
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload)
-    {
-        if (Predicate.Invoke(state))
-        {
-            EnqueueDirect(workload);
-            return true;
-        }
-        return false;
-    }
-
     protected override void EnqueueDirect(AbstractWorkloadBase workload)
     {
         _localQueue.Enqueue(workload);
@@ -247,11 +245,7 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
     public override bool TryRemoveChild(IClassifyingQdisc<THandle> child) => throw new NotSupportedException();
 
     /// <inheritdoc/>
-    protected override bool ContainsChild(THandle handle) =>
-        TryFindChild(handle, out _);
-
-    /// <inheritdoc/>
-    protected override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
+    public override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
     {
         for (int i = 1; i < _children.Length; i++)
         {

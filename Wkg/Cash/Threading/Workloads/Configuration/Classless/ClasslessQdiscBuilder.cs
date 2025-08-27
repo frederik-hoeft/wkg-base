@@ -1,13 +1,15 @@
 ﻿using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classification;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Cash.Threading.Workloads.Configuration.Classless;
 
 public interface IClasslessQdiscBuilder
 {
-    IClassifyingQdisc<THandle> Build<THandle>(THandle handle, Predicate<object?>? predicate) where THandle : unmanaged;
+    IClassifyingQdisc<THandle> Build<THandle>(THandle handle, IFilterManager filters) where THandle : unmanaged;
 
-    IClassifyingQdisc<THandle> BuildUnsafe<THandle>(THandle handle = default, Predicate<object?>? predicate = null) where THandle : unmanaged;
+    IClassifyingQdisc<THandle> BuildUnsafe<THandle>(THandle handle = default, IFilterManager? filters = null) where THandle : unmanaged;
 }
 
 public interface IClasslessQdiscBuilder<TSelf> : IClasslessQdiscBuilder where TSelf : ClasslessQdiscBuilder<TSelf>, IClasslessQdiscBuilder<TSelf>
@@ -17,15 +19,16 @@ public interface IClasslessQdiscBuilder<TSelf> : IClasslessQdiscBuilder where TS
 
 public abstract class ClasslessQdiscBuilder<TSelf> : IClasslessQdiscBuilder where TSelf : ClasslessQdiscBuilder<TSelf>, IClasslessQdiscBuilder<TSelf>
 {
-    protected abstract IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate) where THandle : unmanaged;
+    protected abstract IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters) where THandle : unmanaged;
 
-    IClassifyingQdisc<THandle> IClasslessQdiscBuilder.BuildUnsafe<THandle>(THandle handle, Predicate<object?>? predicate) => 
-        BuildInternal(handle, predicate);
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_CALLER)]
+    IClassifyingQdisc<THandle> IClasslessQdiscBuilder.BuildUnsafe<THandle>(THandle handle, IFilterManager? filters) => 
+        BuildInternal(handle, filters ?? FilterManager.MatchNothing());
 
-    IClassifyingQdisc<THandle> IClasslessQdiscBuilder.Build<THandle>(THandle handle, Predicate<object?>? predicate)
+    IClassifyingQdisc<THandle> IClasslessQdiscBuilder.Build<THandle>(THandle handle, IFilterManager filters)
     {
         WorkloadSchedulingException.ThrowIfHandleIsDefault(handle);
 
-        return BuildInternal(handle, predicate);
+        return BuildInternal(handle, filters);
     }
 }

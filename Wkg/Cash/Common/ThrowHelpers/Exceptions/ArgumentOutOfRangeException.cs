@@ -5,6 +5,7 @@ namespace Cash.Common.ThrowHelpers;
 
 using AOORE = ArgumentOutOfRangeException;
 
+[SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Intended usage pattern")]
 public static partial class Throw
 {
     /// <summary>

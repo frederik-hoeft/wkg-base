@@ -1,5 +1,6 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.LatestOnly;
 
@@ -12,6 +13,6 @@ public class LatestOnly : ClasslessQdiscBuilder<LatestOnly>, IClasslessQdiscBuil
 
     public static LatestOnly CreateBuilder(IQdiscBuilderContext context) => new();
 
-    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate) => 
-        new LatestOnlyQdisc<THandle>(handle, predicate);
+    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters) => 
+        new LatestOnlyQdisc<THandle>(handle, filters);
 }

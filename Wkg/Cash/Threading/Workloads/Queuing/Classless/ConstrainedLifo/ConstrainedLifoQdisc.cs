@@ -1,12 +1,13 @@
 ﻿using Cash.Common;
+using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 
-internal sealed class ConstrainedLifoQdisc<THandle>(THandle handle, Predicate<object?>? predicate, int maxCount, ConstrainedPrioritizationOptions options) 
-    : ConstrainedFifoQdisc<THandle>(handle, predicate, maxCount, options), IClassifyingQdisc<THandle> where THandle : unmanaged
+internal sealed class ConstrainedLifoQdisc<THandle>(THandle handle, IFilterManager filters, int maxCount, ConstrainedPrioritizationOptions options) 
+    : ConstrainedFifoQdisc<THandle>(handle, filters, maxCount, options), IClassifyingQdisc<THandle> where THandle : unmanaged
 {
     protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {

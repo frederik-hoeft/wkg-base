@@ -1,5 +1,6 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
 
@@ -32,13 +33,13 @@ public sealed class ConstrainedFifo : ClasslessQdiscBuilder<ConstrainedFifo>, IC
         return this;
     }
 
-    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate)
+    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters)
     {
         if (_capacity == -1)
         {
             throw new InvalidOperationException("No capacity was specified.");
         }
 
-        return new ConstrainedFifoQdisc<THandle>(handle, predicate, _capacity, _constrainedOptions);
+        return new ConstrainedFifoQdisc<THandle>(handle, filters, _capacity, _constrainedOptions);
     }
 }

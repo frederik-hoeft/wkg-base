@@ -1,17 +1,105 @@
 ﻿using Cash.Diagnostic;
+using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Factories;
 using Cash.Threading.Workloads.Queuing;
+using Cash.Threading.Workloads.Queuing.Classless;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
-using Cash.Threading.Workloads;
 
 namespace Cash.Threading.Workloads.Scheduling;
 
 using CommonFlags = WorkloadStatus.CommonFlags;
 
-internal class WorkloadScheduler : INotifyWorkScheduled
+internal sealed class WorkloadScheduler<THandle>(IClassifyingQdisc<THandle> root, IWorkloadDispatcher dispatcher) : IDisposable where THandle : unmanaged
+{
+    private IClassifyingQdisc<THandle> _root = root;
+    private bool _disposedValue;
+
+    internal ref IClassifyingQdisc<THandle> RootRef => ref _root;
+
+    public void Schedule(THandle handle, AbstractWorkloadBase workload)
+    {
+        IClassifyingQdisc<THandle> root = _root;
+        if (root.Handle.Equals(handle))
+        {
+            root.Enqueue(workload);
+        }
+        else if (!root.TryEnqueueByHandle(handle, workload))
+        {
+            WorkloadSchedulingException.ThrowNoRouteFound(handle);
+        }
+        dispatcher.OnWorkScheduled();
+    }
+
+    public void Schedule(AbstractWorkloadBase workload)
+    {
+        _root.Enqueue(workload);
+        dispatcher.OnWorkScheduled();
+    }
+
+    public void Classify(object? state, AbstractWorkloadBase workload)
+    {
+        if (!_root.TryEnqueue(state, workload))
+        {
+            WorkloadSchedulingException.ThrowClassificationFailed(state);
+        }
+        dispatcher.OnWorkScheduled();
+    }
+
+    private void Dispose(bool disposing)
+    {
+        if (!_disposedValue)
+        {
+            if (disposing && !_root.IsCompleted)
+            {
+                DebugLog.WriteInfo("Workload scheduler: disposal requested.");
+                // CAS in the completion sentinel to prevent further scheduling.
+                _root.Complete();
+                // dispose the root scheduler and wait for all workers to exit.
+                dispatcher.Dispose();
+                // clear all workloads from the root scheduler.
+                ObjectDisposedException exception = new(nameof(WorkloadFactory<THandle>), "The parent workload factory was disposed.");
+                ExceptionDispatchInfo.SetCurrentStackTrace(exception);
+                while (_root.TryDequeueInternal(workerId: 0, backTrack: false, out AbstractWorkloadBase? workload))
+                {
+                    if (!workload.IsCompleted)
+                    {
+                        workload.InternalAbort(exception);
+                        DebugLog.WriteWarning($"Disposing workload factory but scheduler still contains uncompleted workloads. Forcefully aborted workload {workload}.");
+                    }
+                    if (workload is AwaitableWorkload awaitable)
+                    {
+                        awaitable.UnbindQdiscUnsafe();
+                    }
+                }
+                // dispose the qdisc data structures.
+                DebugLog.WriteDebug("Disposing scheduler data structures NOW.");
+                _root.Dispose();
+            }
+            _disposedValue = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+}
+
+public interface IWorkloadDispatcher : IDisposable
+{
+    /// <summary>
+    /// Notifies the nearest ancestor workload scheduler that there is work to be done.
+    /// </summary>
+    internal void OnWorkScheduled();
+}
+
+internal class WorkloadDispatcher : IWorkloadDispatcher
 {
     private readonly IQdisc _rootQdisc;
     protected readonly ManualResetEventSlim _fullyDisposed = new(false);
@@ -21,7 +109,7 @@ internal class WorkloadScheduler : INotifyWorkScheduled
     // tracks the current degree of parallelism and the worker ids that are currently in use
     private WorkerState _state;
 
-    public WorkloadScheduler(IQdisc rootQdisc, int maximumConcurrencyLevel)
+    public WorkloadDispatcher(IQdisc rootQdisc, int maximumConcurrencyLevel)
     {
         if (maximumConcurrencyLevel < 1)
         {
@@ -37,7 +125,7 @@ internal class WorkloadScheduler : INotifyWorkScheduled
 
     public int MaximumConcurrencyLevel { get; }
 
-    void INotifyWorkScheduled.OnWorkScheduled()
+    void IWorkloadDispatcher.OnWorkScheduled()
     {
         DebugLog.WriteDiagnostic("Workload scheduler was poked.");
         // this atomic clamped increment is committing, if we have room for another worker, we must start one
@@ -100,7 +188,7 @@ internal class WorkloadScheduler : INotifyWorkScheduled
             if (workload?.IsCompleted is false)
             {
                 // if we dequeued a workload, but the scheduler was disposed, we need to abort the workload
-                workload.InternalAbort(ExceptionDispatchInfo.SetCurrentStackTrace(new ObjectDisposedException(nameof(WorkloadSchedulerWithDI))));
+                workload.InternalAbort(ExceptionDispatchInfo.SetCurrentStackTrace(new ObjectDisposedException(nameof(WorkloadDispatcherWithDI))));
                 DebugLog.WriteDiagnostic($"Aborted workload {workload} due to scheduler disposal.");
             }
             if (_state.VolatileWorkerCount <= 0)
@@ -193,23 +281,26 @@ internal class WorkloadScheduler : INotifyWorkScheduled
         }
     }
 
-    void INotifyWorkScheduled.DisposeRoot()
+    public void Dispose()
     {
-        DebugLog.WriteInfo($"Disposing workload scheduler with root qdisc {_rootQdisc}...");
-        _disposed = true;
-        // it would be increadibly bad if we started waiting before we set the disposed flag
-        Thread.MemoryBarrier();
-        DebugLog.WriteInfo($"Waiting for all workers to terminate...");
-        if (_state.VolatileWorkerCount > 0)
+        if (!_disposed)
         {
-            _fullyDisposed.Wait();
+            DebugLog.WriteInfo($"Disposing workload scheduler with root qdisc {_rootQdisc}...");
+            _disposed = true;
+            // it would be increadibly bad if we started waiting before we set the disposed flag
+            Thread.MemoryBarrier();
+            DebugLog.WriteInfo($"Waiting for all workers to terminate...");
+            if (_state.VolatileWorkerCount > 0)
+            {
+                _fullyDisposed.Wait();
+            }
+            DebugLog.WriteInfo($"All workers terminated.");
         }
-        DebugLog.WriteInfo($"All workers terminated.");
     }
 
     private protected struct WorkerState(int _maximumConcurrencyLevel)
     {
-        private readonly ConcurrentBag<int> _workerIds = new(Enumerable.Range(0, _maximumConcurrencyLevel));
+        private readonly ConcurrentBag<int> _workerIds = [.. Enumerable.Range(0, _maximumConcurrencyLevel)];
         private int _currentDegreeOfParallelism = 0;
 
         public int VolatileWorkerCount => Volatile.Read(ref _currentDegreeOfParallelism);

@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace Cash.Threading.Workloads.WorkloadTypes;
 
-internal class AnonymousWorkloadImplWithDI : AnonymousWorkload, IPoolable<AnonymousWorkloadImplWithDI>
+internal sealed class AnonymousWorkloadImplWithDI : AnonymousWorkload, IPoolable<AnonymousWorkloadImplWithDI>
 {
     private readonly IPool<AnonymousWorkloadImplWithDI>? _pool;
     private Action<IWorkloadServiceProvider> _action;

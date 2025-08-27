@@ -1,10 +1,10 @@
-﻿using Cash.Threading.Workloads.Queuing.Classless;
-using System.Diagnostics.CodeAnalysis;
+﻿using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Queuing.Classless;
 
 namespace Cash.Threading.Workloads.Queuing.Classful;
 
-public abstract class ClassfulQdisc<THandle>(THandle handle, Predicate<object?>? predicate) 
-    : ClassifyingQdisc<THandle>(handle, predicate), IClassfulQdisc<THandle> 
+public abstract class ClassfulQdisc<THandle>(THandle handle, IFilterManager filters) 
+    : ClassifyingQdisc<THandle>(handle, filters), IClassfulQdisc<THandle> 
     where THandle : unmanaged
 {
 
@@ -32,13 +32,7 @@ public abstract class ClassfulQdisc<THandle>(THandle handle, Predicate<object?>?
     /// <inheritdoc/>
     public abstract bool TryRemoveChild(IClassifyingQdisc<THandle> child);
 
-    /// <inheritdoc cref="IClassfulQdisc{THandle}.TryFindChild(THandle, out IClassifyingQdisc{THandle}?)"/>
-    protected abstract bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
-
     void INotifyWorkScheduled.OnWorkScheduled() => OnWorkScheduled();
-
-    bool IClassfulQdisc<THandle>.TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child) =>
-        TryFindChild(handle, out child);
 
     INotifyWorkScheduled IClassifyingQdisc.ParentScheduler => ParentScheduler;
 

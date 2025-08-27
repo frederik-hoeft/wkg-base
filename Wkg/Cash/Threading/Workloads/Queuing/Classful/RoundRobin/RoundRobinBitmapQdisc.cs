@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
 
@@ -30,9 +31,9 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
     private int _rrIndex;
     private int _maxRoutingPathDepthEncountered = 4;
 
-    public RoundRobinBitmapQdisc(THandle handle, Predicate<object?>? predicate, IClasslessQdiscBuilder localQueueBuilder, int maxConcurrency) : base(handle, predicate)
+    public RoundRobinBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, int maxConcurrency) : base(handle, filters)
     {
-        _localQueue = localQueueBuilder.BuildUnsafe(default(THandle), MatchNothingPredicate);
+        _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
         _localLasts = new IQdisc[maxConcurrency];
         _children = [_localQueue];
         _childrenLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
@@ -176,10 +177,10 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
 
     protected override bool CanClassify(object? state)
     {
-        if (Predicate.Invoke(state))
+        if (!Filters.Match(state))
         {
-            // fast path, we can enqueue directly to the local queue
-            return true;
+            // fast path, we know that we can't classify the workload
+            return false;
         }
 
         using ILockOwnership readLock = _childrenLock.AcquireReadLock();
@@ -255,6 +256,11 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
         DebugLog.WriteDiagnostic($"Trying to enqueue workload {workload} to round robin qdisc {this}.");
+        if (!Filters.Match(state))
+        {
+            DebugLog.WriteDiagnostic($"{this}: cannot classify workload {workload}, as it does not match the qdisc's filters.");
+            return false;
+        }
 
         // only lock the children array while we need to access it
         using (ILockOwnership readLock = _childrenLock.AcquireReadLock())
@@ -283,7 +289,8 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
                 }
             }
         }
-        return TryEnqueueDirect(state, workload);
+        EnqueueDirect(workload);
+        return true;
     }
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path)
@@ -314,16 +321,6 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
         int index = routingPathNode.Offset;
         _th_lastEnqueuedChildIndex.Value = index;
         DebugLog.WriteDiagnostic($"{this}: expecting to enqueue workload {workload} to child {_children[index]} via routing path.");
-    }
-
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload)
-    {
-        if (Predicate.Invoke(state))
-        {
-            EnqueueDirect(workload);
-            return true;
-        }
-        return false;
     }
 
     protected override void EnqueueDirect(AbstractWorkloadBase workload)
@@ -476,11 +473,7 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
     }
 
     /// <inheritdoc/>
-    protected override bool ContainsChild(THandle handle) =>
-        TryFindChild(handle, out _);
-
-    /// <inheritdoc/>
-    protected override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
+    public override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
     {
         using ILockOwnership readLock = _childrenLock.AcquireReadLock();
         return TryFindChildUnsafe(handle, out child);

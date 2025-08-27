@@ -1,6 +1,7 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Common.ThrowHelpers;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 
@@ -39,7 +40,7 @@ public class PriorityFifoFast : ClasslessQdiscBuilder<PriorityFifoFast>, IClassl
         return this;
     }
 
-    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate)
+    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters)
     {
         THandle[] bandHandles;
         int bandCount;
@@ -77,6 +78,6 @@ public class PriorityFifoFast : ClasslessQdiscBuilder<PriorityFifoFast>, IClassl
         }
         Throw.ArgumentOutOfRangeException.IfNotInRange(defaultBand, 0, bandCount - 1, nameof(defaultBand));
         Func<object?, int> bandSelector = _bandSelector ?? (state => defaultBand);
-        return new PriorityFifoFastQdisc<THandle>(handle, bandHandles, bandCount, defaultBand, bandSelector, predicate);
+        return new PriorityFifoFastQdisc<THandle>(handle, bandHandles, bandCount, defaultBand, bandSelector, filters);
     }
 }

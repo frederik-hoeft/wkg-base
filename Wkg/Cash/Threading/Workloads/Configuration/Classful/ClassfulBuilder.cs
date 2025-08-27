@@ -4,18 +4,20 @@ using Cash.Threading.Workloads.Queuing.Classful;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Queuing.Classification;
+using System.Diagnostics.CodeAnalysis;
+using Cash.Threading.Workloads.Configuration.Classification;
 
 namespace Cash.Threading.Workloads.Configuration.Classful;
 
-public sealed class ClassfulBuilder<THandle, TPredicateBuilder, TQdisc>
+public sealed class ClassfulBuilder<THandle, TQdisc>
     where THandle : unmanaged
-    where TPredicateBuilder : IPredicateBuilder, new()
     where TQdisc : ClassfulQdiscBuilder<TQdisc>, IClassfulQdiscBuilder<TQdisc>
 {
     private readonly QdiscBuilderContext _context;
     private readonly THandle _handle;
     private readonly List<IClassifyingQdisc<THandle>> _children = [];
-    private readonly TPredicateBuilder _predicateBuilder = new();
+    private readonly IFilterManagerFactory _filterManagerFactory = DefaultFilterManagerFactory.Instance;
+    private IFilterManager? _filters;
     private TQdisc? _qdiscBuilder;
 
     internal ClassfulBuilder(THandle handle, QdiscBuilderContext context)
@@ -26,19 +28,20 @@ public sealed class ClassfulBuilder<THandle, TPredicateBuilder, TQdisc>
 
     public ClassfulBuilder(THandle handle, IQdiscBuilderContext context) : this(handle, (QdiscBuilderContext)context) => Pass();
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClasslessChild<TChild>(THandle childHandle)
+    public ClassfulBuilder<THandle, TQdisc> AddClasslessChild<TChild>(THandle childHandle)
         where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore<TChild>(childHandle, null, null);
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClasslessChild<TChild>(THandle childHandle, Action<TChild> configureChild)
+    public ClassfulBuilder<THandle, TQdisc> AddClasslessChild<TChild>(THandle childHandle, Action<TChild> configureChild)
         where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore(childHandle, null, configureChild);
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClasslessChild<TChild>(THandle childHandle, Action<TPredicateBuilder> configureClassification)
-        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore<TChild>(childHandle, configureClassification, null);
+    public ClassfulBuilder<THandle, TQdisc> AddClasslessChild<TChild>(THandle childHandle, Action<IFilterManager> configureFilters)
+        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore<TChild>(childHandle, configureFilters, null);
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClasslessChild<TChild>(THandle childHandle, Action<TPredicateBuilder> configureClassification, Action<TChild> configureChild)
-        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore(childHandle, configureClassification, configureChild);
+    public ClassfulBuilder<THandle, TQdisc> AddClasslessChild<TChild>(THandle childHandle, Action<IFilterManager> configureFilters, Action<TChild> configureChild)
+        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore(childHandle, configureFilters, configureChild);
 
-    private ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClasslessChildCore<TChild>(THandle childHandle, Action<TPredicateBuilder>? configureClassification, Action<TChild>? configureChild)
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_PROXY)]
+    private ClassfulBuilder<THandle, TQdisc> AddClasslessChildCore<TChild>(THandle childHandle, Action<IFilterManager>? configureFilters, Action<TChild>? configureChild)
         where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild>
     {
         TChild childBuilder = TChild.CreateBuilder(_context);
@@ -46,28 +49,22 @@ public sealed class ClassfulBuilder<THandle, TPredicateBuilder, TQdisc>
         {
             configureChild(childBuilder);
         }
-        Predicate<object?>? predicate = null;
-        if (configureClassification is not null)
-        {
-            TPredicateBuilder predicateBuilder = new();
-            configureClassification(predicateBuilder);
-            predicate = predicateBuilder.Compile();
-        }
-        IClassifyingQdisc<THandle> child = childBuilder.Build(childHandle, predicate);
+        IFilterManager filters = _filterManagerFactory.CreateFilterManager(configureFilters);
+        IClassifyingQdisc<THandle> child = childBuilder.Build(childHandle, filters);
         _children.Add(child);
         return this;
     }
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClassfulChild<TChild>(THandle childHandle)
+    public ClassfulBuilder<THandle, TQdisc> AddClassfulChild<TChild>(THandle childHandle)
         where TChild : ClassfulQdiscBuilder<TChild>, IClassfulQdiscBuilder<TChild>
     {
-        ClassfulBuilder<THandle, TPredicateBuilder, TChild> childBuilder = new(childHandle, _context);
+        ClassfulBuilder<THandle, TChild> childBuilder = new(childHandle, _context);
         IClassfulQdisc<THandle> child = childBuilder.Build();
         _children.Add(child);
         return this;
     }
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClassfulChild<TChild>(THandle childHandle, Action<TChild> configureChild)
+    public ClassfulBuilder<THandle, TQdisc> AddClassfulChild<TChild>(THandle childHandle, Action<TChild> configureChild)
         where TChild : CustomClassfulQdiscBuilder<THandle, TChild>, ICustomClassfulQdiscBuilder<THandle, TChild>
     {
         TChild childBuilder = TChild.CreateBuilder(childHandle, _context);
@@ -77,23 +74,24 @@ public sealed class ClassfulBuilder<THandle, TPredicateBuilder, TQdisc>
         return this;
     }
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> AddClassfulChild<TChild>(THandle childHandle, Action<ClassfulBuilder<THandle, TPredicateBuilder, TChild>> configureChild)
+    public ClassfulBuilder<THandle, TQdisc> AddClassfulChild<TChild>(THandle childHandle, Action<ClassfulBuilder<THandle, TChild>> configureChild)
         where TChild : ClassfulQdiscBuilder<TChild>, IClassfulQdiscBuilder<TChild>
     {
-        ClassfulBuilder<THandle, TPredicateBuilder, TChild> childBuilder = new(childHandle, _context);
+        ClassfulBuilder<THandle, TChild> childBuilder = new(childHandle, _context);
         configureChild(childBuilder);
         IClassfulQdisc<THandle> child = childBuilder.Build();
         _children.Add(child);
         return this;
     }
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> ConfigureClassificationPredicates(Action<TPredicateBuilder> classifier)
+    public ClassfulBuilder<THandle, TQdisc> ConfigureFilters(Action<IFilterManager> classifier)
     {
-        classifier(_predicateBuilder);
+        _filters ??= new FilterManager();
+        classifier(_filters);
         return this;
     }
 
-    public ClassfulBuilder<THandle, TPredicateBuilder, TQdisc> ConfigureQdisc(Action<TQdisc> configureQdisc)
+    public ClassfulBuilder<THandle, TQdisc> ConfigureQdisc(Action<TQdisc> configureQdisc)
     {
         if (_qdiscBuilder is not null)
         {
@@ -108,9 +106,8 @@ public sealed class ClassfulBuilder<THandle, TPredicateBuilder, TQdisc>
     internal IClassfulQdisc<THandle> Build()
     {
         _qdiscBuilder ??= TQdisc.CreateBuilder(_context);
-
-        Predicate<object?>? predicate = _predicateBuilder.Compile();
-        IClassfulQdisc<THandle> qdisc = _qdiscBuilder.Build(_handle, predicate);
+        MatchAllFilter.Instance.ApplyIfUninitialized(ref _filters);
+        IClassfulQdisc<THandle> qdisc = _qdiscBuilder.Build(_handle, _filters);
         foreach (IClassifyingQdisc<THandle> child in _children)
         {
             qdisc.TryAddChild(child);

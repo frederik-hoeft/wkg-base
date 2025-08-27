@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.PrioFast;
 
@@ -27,9 +28,10 @@ internal sealed class PrioFastBitmapQdisc<THandle> : ClassfulQdisc<THandle>, ICl
 
     private int _maxRoutingPathDepthEncountered = 4;
 
-    public PrioFastBitmapQdisc(THandle handle, Predicate<object?>? predicate, IClasslessQdiscBuilder localQueueBuilder, IClassifyingQdisc<THandle>[] children, int maxConcurrency) : base(handle, predicate)
+    public PrioFastBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, IClassifyingQdisc<THandle>[] children, int maxConcurrency) 
+        : base(handle, filters)
     {
-        _localQueue = localQueueBuilder.BuildUnsafe(default(THandle), MatchNothingPredicate);
+        _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
         _localLasts = new IQdisc[maxConcurrency];
         _children = [_localQueue, .. children];
         foreach (IClassifyingQdisc<THandle> child in children)
@@ -340,11 +342,7 @@ internal sealed class PrioFastBitmapQdisc<THandle> : ClassfulQdisc<THandle>, ICl
     public override bool TryRemoveChild(IClassifyingQdisc<THandle> child) => throw new NotSupportedException();
 
     /// <inheritdoc/>
-    protected override bool ContainsChild(THandle handle) =>
-        TryFindChild(handle, out _);
-
-    /// <inheritdoc/>
-    protected override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
+    public override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
     {
         IClassifyingQdisc<THandle>[] children = _children;
         for (int i = 1; i < children.Length; i++)

@@ -2,7 +2,7 @@
 
 namespace Cash.Threading.Workloads.WorkloadTypes;
 
-internal class AnonymousWorkloadImpl : AnonymousWorkload, IPoolable<AnonymousWorkloadImpl>
+internal sealed class AnonymousWorkloadImpl : AnonymousWorkload, IPoolable<AnonymousWorkloadImpl>
 {
     private readonly IPool<AnonymousWorkloadImpl>? _pool;
     private Action _action;

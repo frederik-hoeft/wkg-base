@@ -113,5 +113,14 @@ public interface IClassifyingQdisc<THandle> : IClassifyingQdisc, IQdisc<THandle>
     /// </remarks>
     bool ContainsChild(THandle handle);
 
-    bool TryGetChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
+    /// <summary>
+    /// Attempts to find the child with the given handle.
+    /// </summary>
+    /// <param name="handle">The handle of the child to find.</param>
+    /// <param name="child">The child with the given handle, if found.</param>
+    /// <returns><see langword="true"/> if the child was found, <see langword="false"/> if the child was not found.</returns>
+    /// <remarks>
+    /// Qdiscs should only check their children, not their own handle. Checking the qdisc's own handle is the responsibility of the caller. This optimization avoids unnecessary recursion.
+    /// </remarks>
+    bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
 }

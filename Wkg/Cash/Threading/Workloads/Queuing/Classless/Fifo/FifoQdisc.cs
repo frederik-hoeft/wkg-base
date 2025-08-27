@@ -1,4 +1,5 @@
-﻿using Cash.Threading.Workloads.Queuing.Routing;
+﻿using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Queuing.Routing;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
@@ -9,8 +10,8 @@ namespace Cash.Threading.Workloads.Queuing.Classless.Fifo;
 /// </summary>
 /// <typeparam name="THandle">The type of the handle.</typeparam>
 /// <param name="handle">The handle of the qdisc.</param>
-/// <param name="predicate">The predicate used to determine if a workload can be scheduled.</param>
-internal sealed class FifoQdisc<THandle>(THandle handle, Predicate<object?>? predicate) : ClasslessQdisc<THandle>(handle, predicate) where THandle : unmanaged
+/// <param name="filters">The predicate used to determine if a workload can be scheduled.</param>
+internal sealed class FifoQdisc<THandle>(THandle handle, IFilterManager filters) : ClasslessQdisc<THandle>(handle, filters) where THandle : unmanaged
 {
     private readonly ConcurrentQueue<AbstractWorkloadBase> _queue = [];
 
@@ -18,21 +19,15 @@ internal sealed class FifoQdisc<THandle>(THandle handle, Predicate<object?>? pre
 
     public override int BestEffortCount => _queue.Count;
 
-    protected override bool CanClassify(object? state) => Predicate.Invoke(state);
-
-    protected override bool ContainsChild(THandle handle) => false;
-
     protected override void EnqueueDirectLocal(AbstractWorkloadBase workload) => _queue.Enqueue(workload);
 
     protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => _queue.TryDequeue(out workload);
 
-    protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload) => TryEnqueueDirect(state, workload);
-
     protected override bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => false;
 
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload)
+    protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
-        if (Predicate.Invoke(state))
+        if (Filters.Match(state))
         {
             EnqueueDirect(workload);
             return true;

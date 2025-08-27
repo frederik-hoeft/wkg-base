@@ -1,5 +1,6 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.Fifo;
 
@@ -10,6 +11,6 @@ public sealed class Fifo : ClasslessQdiscBuilder<Fifo>, IClasslessQdiscBuilder<F
 {
     public static Fifo CreateBuilder(IQdiscBuilderContext context) => new();
 
-    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate) => 
-        new FifoQdisc<THandle>(handle, predicate);
+    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters) => 
+        new FifoQdisc<THandle>(handle, filters);
 }

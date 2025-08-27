@@ -68,6 +68,7 @@ public ref struct RoutingPath<THandle> where THandle : unmanaged
 
     public readonly void Dispose() => ArrayPool.Return(_path);
 
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "Enumerator is tightly coupled to RoutingPath and is not useful outside of it.")]
     public ref struct Enumerator
     {
         private readonly PooledArray<RoutingPathNode<THandle>> _path;

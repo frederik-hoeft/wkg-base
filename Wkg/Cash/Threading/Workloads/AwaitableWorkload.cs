@@ -495,7 +495,6 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
         string IQdisc.ToTreeString() => ThrowHelper<string>();
         bool IQdisc.TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => (workload = null) is null && ThrowHelper<bool>();
         void IDisposable.Dispose() => ThrowHelper<bool>();
-        IEnumerable<AbstractWorkloadBase> IQdisc.Clear() => ThrowHelper<IEnumerable<AbstractWorkloadBase>>();
 
         [DoesNotReturn]
         [StackTraceHidden]

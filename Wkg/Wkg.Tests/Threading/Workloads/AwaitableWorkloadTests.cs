@@ -104,7 +104,7 @@ public class AwaitableWorkloadTests
         {
             Assert.IsTrue(result.IsSuccess);
             Assert.AreEqual(1, result.Result);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadScheduler.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(TestContinueWith1)));
             mres.Set();
@@ -121,7 +121,7 @@ public class AwaitableWorkloadTests
         workload.ContinueWith(result =>
         {
             Assert.IsTrue(result.IsSuccess);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadScheduler.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(TestContinueWith2)));
             mres.Set();
@@ -140,7 +140,7 @@ public class AwaitableWorkloadTests
         {
             Assert.IsTrue(result.IsSuccess);
             Assert.AreEqual(1, result.Result);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadScheduler.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().Any(frame => frame.GetMethod()?.Name == nameof(TestContinueWithInline1)));
             mres.Set();
@@ -158,7 +158,7 @@ public class AwaitableWorkloadTests
         workload.ContinueWith(result =>
         {
             Assert.IsTrue(result.IsSuccess);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadScheduler.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().Any(frame => frame.GetMethod()?.Name == nameof(TestContinueWithInline2)));
             mres.Set();

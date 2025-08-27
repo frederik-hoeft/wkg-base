@@ -1,5 +1,6 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.Lifo;
 
@@ -10,6 +11,6 @@ public sealed class Lifo : ClasslessQdiscBuilder<Lifo>, IClasslessQdiscBuilder<L
 {
     public static Lifo CreateBuilder(IQdiscBuilderContext context) => new();
 
-    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate) => 
-        new LifoQdisc<THandle>(handle, predicate);
+    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters) => 
+        new LifoQdisc<THandle>(handle, filters);
 }

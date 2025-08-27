@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Cash.Common.ThrowHelpers;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 
@@ -26,7 +27,9 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
     private readonly Func<object?, int> _bandSelector;
     private volatile int _fuzzyCount;
 
-    public PriorityFifoFastQdisc(THandle handle, THandle[] bandHandles, int bands, int defaultBand, Func<object?, int> bandSelector, Predicate<object?>? predicate) : base(handle, predicate)
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_PROXY)]
+    public PriorityFifoFastQdisc(THandle handle, THandle[] bandHandles, int bands, int defaultBand, Func<object?, int> bandSelector, IFilterManager filters) 
+        : base(handle, filters)
     {
         Debug.Assert(bands > 1);
         Debug.Assert(defaultBand >= 0 && defaultBand < bands);
@@ -38,7 +41,7 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         for (int i = 0; i < bands; i++)
         {
             THandle bandHandle = _bandHandlesConfigured ? bandHandles[i] : default;
-            FifoQdisc<THandle> band = new(bandHandle, null);
+            FifoQdisc<THandle> band = new(bandHandle, FilterManager.MatchNothing());
             band.To<IQdisc>().InternalInitialize(this);
             _bands[i] = band;
         }
@@ -50,9 +53,24 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
 
     public override int BestEffortCount => _fuzzyCount;
 
-    protected override bool CanClassify(object? state) => Predicate.Invoke(state);
+    protected override bool CanClassify(object? state) => Filters.Match(state);
 
-    protected override bool ContainsChild(THandle handle) => false;
+    public override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
+    {
+        if (_bandHandlesConfigured)
+        {
+            for (int i = 0; i < _bands.Length; i++)
+            {
+                if (_bands[i].Handle.Equals(handle))
+                {
+                    child = _bands[i];
+                    return true;
+                }
+            }
+        }
+        child = null;
+        return false;
+    }
 
     protected override void EnqueueDirect(AbstractWorkloadBase workload) => EnqueueDirectCore(workload, _defaultBand);
 
@@ -111,8 +129,9 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
 
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
-        if (Predicate.Invoke(state))
+        if (Filters.Match(state))
         {
+            // TODO: use filters for children
             int band = _bandSelector.Invoke(state);
             if (band == -1)
             {
@@ -140,8 +159,6 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         }
         return false;
     }
-
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload) => TryEnqueue(state, workload);
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path)
     {

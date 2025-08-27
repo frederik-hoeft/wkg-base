@@ -4,7 +4,7 @@ using Cash.Threading.Workloads.DependencyInjection;
 
 namespace Cash.Threading.Workloads.WorkloadTypes;
 
-internal class AnonymousWorkloadPoolManager(int _capacity)
+internal sealed class AnonymousWorkloadPoolManager(int _capacity)
 {
     private readonly Lock _lock = new();
     private ObjectPool<AnonymousWorkloadImpl>? _pool;

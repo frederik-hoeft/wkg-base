@@ -1,6 +1,7 @@
 ﻿using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Configuration.Classful;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
@@ -53,11 +54,11 @@ public sealed class RoundRobin : ClassfulQdiscBuilder<RoundRobin>, IClassfulQdis
     }
 
     /// <inheritdoc/>
-    internal protected override IClassfulQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate)
+    internal protected override IClassfulQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters)
     {
         _localQueueBuilder ??= Fifo.CreateBuilder(_context);
         return _expectHighContention
-            ? new RoundRobinBitmapQdisc<THandle>(handle, predicate, _localQueueBuilder, _context.MaximumConcurrency)
-            : new RoundRobinLockingQdisc<THandle>(handle, predicate, _localQueueBuilder, _context.MaximumConcurrency);
+            ? new RoundRobinBitmapQdisc<THandle>(handle, filters, _localQueueBuilder, _context.MaximumConcurrency)
+            : new RoundRobinLockingQdisc<THandle>(handle, filters, _localQueueBuilder, _context.MaximumConcurrency);
     }
 }

@@ -2,6 +2,7 @@
 using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
 using Cash.Common.ThrowHelpers;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 
@@ -30,13 +31,13 @@ public sealed class ConstrainedLifo : ClasslessQdiscBuilder<ConstrainedLifo>, IC
         return this;
     }
 
-    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, Predicate<object?>? predicate)
+    protected override IClassifyingQdisc<THandle> BuildInternal<THandle>(THandle handle, IFilterManager filters)
     {
         if (_capacity == -1)
         {
             throw new InvalidOperationException("No capacity was specified.");
         }
 
-        return new ConstrainedLifoQdisc<THandle>(handle, predicate, _capacity, _constrainedOptions);
+        return new ConstrainedLifoQdisc<THandle>(handle, filters, _capacity, _constrainedOptions);
     }
 }

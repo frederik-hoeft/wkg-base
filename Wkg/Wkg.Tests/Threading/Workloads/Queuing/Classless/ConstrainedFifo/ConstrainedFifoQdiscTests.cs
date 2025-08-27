@@ -7,6 +7,7 @@ using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
 using Cash.Threading.Workloads.WorkloadTypes;
 using CF = Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo.ConstrainedFifo;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Tests.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
 
@@ -29,21 +30,21 @@ public class ConstrainedFifoQdiscTests
     public void TestBuilder()
     {
         Assert.ThrowsException<InvalidOperationException>(() =>
-            CF.CreateBuilder(s_context).To<IClasslessQdiscBuilder>().Build(1, null));
+            CF.CreateBuilder(s_context).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
         Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
-            CF.CreateBuilder(s_context).WithCapacity(0).To<IClasslessQdiscBuilder>().Build(1, null));
+            CF.CreateBuilder(s_context).WithCapacity(0).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
         Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
-            CF.CreateBuilder(s_context).WithCapacity(1).WithCapacity(0).To<IClasslessQdiscBuilder>().Build(1, null));
+            CF.CreateBuilder(s_context).WithCapacity(1).WithCapacity(0).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
         Assert.ThrowsException<InvalidOperationException>(() =>
-            CF.CreateBuilder(s_context).WithCapacity(1).WithCapacity(3).To<IClasslessQdiscBuilder>().Build(1, null));
+            CF.CreateBuilder(s_context).WithCapacity(1).WithCapacity(3).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
         Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
-            CF.CreateBuilder(s_context).WithCapacity(-1).To<IClasslessQdiscBuilder>().Build(1, null));
+            CF.CreateBuilder(s_context).WithCapacity(-1).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
-        IClassifyingQdisc<int> qdisc = CF.CreateBuilder(s_context).WithCapacity(8).To<IClasslessQdiscBuilder>().Build(1, null);
+        IClassifyingQdisc<int> qdisc = CF.CreateBuilder(s_context).WithCapacity(8).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing());
         Assert.IsNotNull(qdisc);
         Assert.IsInstanceOfType<ConstrainedFifoQdisc<int>>(qdisc);
     }

@@ -198,7 +198,7 @@ public sealed class ConcurrentBitmap : IDisposable, IParentNode
 
     /// <inheritdoc cref="IsEmpty"/>
     /// <remarks>
-    /// <see langword="WARNING"/>: This property is not thread-safe and should only be used when the bitmap is not expanded or shrunk concurrently (e.g., vie <see cref="InsertBitAt(int, bool, bool)"/>, <see cref="RemoveBitAt(int, bool)"/>, <see cref="Grow(int)"/>, or <see cref="Shrink(int)"/>)."/>
+    /// <see langword="WARNING"/>: This property is not thread-safe and should only be used when the bitmap is not expanded or shrunk concurrently (e.g., via <see cref="InsertBitAt(int, bool, bool)"/>, <see cref="RemoveBitAt(int, bool)"/>, <see cref="Grow(int)"/>, or <see cref="Shrink(int)"/>)."/>
     /// </remarks>
     public bool IsEmptyUnsafe => _root.IsEmpty;
 

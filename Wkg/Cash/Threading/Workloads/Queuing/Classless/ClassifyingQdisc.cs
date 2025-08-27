@@ -147,7 +147,7 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     protected abstract bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path);
 
     /// <inheritdoc cref="IClassifyingQdisc{THandle}.ContainsChild(THandle)"/>
-    protected abstract bool ContainsChild(THandle handle);
+    public virtual bool ContainsChild(THandle handle) => TryFindChild(handle, out _);
 
     /// <inheritdoc cref="IClassifyingQdisc.CanClassify(object?)"/>
     protected abstract bool CanClassify(object? state);
@@ -155,34 +155,16 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     /// <inheritdoc cref="IClassifyingQdisc.TryEnqueue(object?, AbstractWorkloadBase)"/>
     protected abstract bool TryEnqueue(object? state, AbstractWorkloadBase workload);
 
-    /// <inheritdoc cref="IClassifyingQdisc.TryEnqueueDirect(object?, AbstractWorkloadBase)"/>
-    protected abstract bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload);
-
-    /// <inheritdoc cref="IQdisc.Clear()"/>
-    protected abstract IEnumerable<AbstractWorkloadBase> Clear();
+    /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryFindChild(THandle, out IClassifyingQdisc{THandle}?)"/>
+    public abstract bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
 
     bool IClassifyingQdisc<THandle>.TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => TryEnqueueByHandle(handle, workload);
     void IClassifyingQdisc<THandle>.WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => WillEnqueueFromRoutingPath(in routingPathNode, workload);
     bool IClassifyingQdisc<THandle>.TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => TryFindRoute(handle, ref path);
-    bool IClassifyingQdisc<THandle>.ContainsChild(THandle handle) => ContainsChild(handle);
     bool IClassifyingQdisc.CanClassify(object? state) => CanClassify(state);
     bool IClassifyingQdisc.TryEnqueue(object? state, AbstractWorkloadBase workload) => TryEnqueue(state, workload);
-    bool IClassifyingQdisc.TryEnqueueDirect(object? state, AbstractWorkloadBase workload) => TryEnqueueDirect(state, workload);
-    IEnumerable<AbstractWorkloadBase> IQdisc.Clear() => Clear();
 
     #endregion IClassifyingQdisc / IClassifyingQdisc<THandle> implementation
-
-    /// <summary>
-    /// A predicate that matches everything.
-    /// </summary>
-    /// <returns><see langword="true"/></returns>
-    protected static bool MatchEverythingPredicate(object? _) => true;
-
-    /// <summary>
-    /// A predicate that matches nothing.
-    /// </summary>
-    /// <returns><see langword="false"/></returns>
-    protected static bool MatchNothingPredicate(object? _) => false;
 
     /// <inheritdoc/>
     public override string ToString() => $"{GetType().Name} ({Handle})";
@@ -190,7 +172,7 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     /// <summary>
     /// Disposes of any managed resources held by this qdisc.
     /// </summary>
-    protected virtual void DisposeManaged() => Pass();
+    protected virtual void DisposeManaged() => Filters.Dispose();
 
     /// <summary>
     /// Disposes of any unmanaged resources held by this qdisc.
@@ -246,12 +228,11 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     /// </summary>
     protected void ChildToTreeString(IClassifyingQdisc<THandle> qdisc, StringBuilder builder, int currentIndent)
     {
-        if (qdisc is ClassifyingQdisc<THandle> classlessQdisc)
+        if (qdisc is ClassifyingQdisc<THandle> classifyingQdisc)
         {
-            builder.AppendLine(classlessQdisc.ToString());
-            classlessQdisc.ChildrenToTreeString(builder, currentIndent + 1);
+            builder.AppendLine(classifyingQdisc.ToString());
+            builder.AppendIndent(currentIndent + 1).AppendLine(classifyingQdisc.Filters.ToString());
+            classifyingQdisc.ChildrenToTreeString(builder, currentIndent + 1);
         }
     }
-
-    public abstract bool TryGetChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
 }

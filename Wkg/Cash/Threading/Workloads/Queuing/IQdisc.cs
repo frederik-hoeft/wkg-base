@@ -74,7 +74,7 @@ public interface IQdisc : IDisposable
     /// <returns><see langword="true"/> if the workload was removed; <see langword="false"/> if the workload could not be found or the qdisc does not support removal of workloads.</returns>
     internal bool TryRemoveInternal(AwaitableWorkload workload);
 
-    internal IEnumerable<AbstractWorkloadBase> Clear();
+    //internal IEnumerable<AbstractWorkloadBase> Clear();
 }
 
 /// <summary>

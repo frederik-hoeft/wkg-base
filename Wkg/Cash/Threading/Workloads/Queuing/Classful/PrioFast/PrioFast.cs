@@ -5,6 +5,7 @@ using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Classless.Fifo;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.PrioFast;
 
@@ -15,7 +16,7 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
     where THandle : unmanaged
 {
     private IClasslessQdiscBuilder? _localQueueBuilder;
-    private Predicate<object?>? _predicate;
+    private IFilterManager? _filters;
     private bool _expectHighContention;
     private readonly Dictionary<int, IClassifyingQdisc<THandle>> _children = [];
 
@@ -24,9 +25,10 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
     public static PrioFast<THandle> CreateBuilder(THandle handle, IQdiscBuilderContext context) =>
        new(handle, context);
 
-    public PrioFast<THandle> WithClassificationPredicate(Predicate<object?> predicate)
+    public PrioFast<THandle> ConfigureFilter(Action<IFilterManager> configureFilters)
     {
-        _predicate = predicate;
+        _filters ??= new FilterManager();
+        configureFilters(_filters);
         return this;
     }
 
@@ -70,13 +72,14 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
     public PrioFast<THandle> AddClasslessChild<TChild>(THandle childHandle, int priority, Action<TChild> configureChild)
         where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore(childHandle, priority, null, configureChild);
 
-    public PrioFast<THandle> AddClasslessChild<TChild>(THandle childHandle, int priority, Action<SimplePredicateBuilder> configureClassification)
-        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore<TChild>(childHandle, priority, configureClassification, null);
+    public PrioFast<THandle> AddClasslessChild<TChild>(THandle childHandle, int priority, Action<IFilterManager> configureFilters)
+        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore<TChild>(childHandle, priority, configureFilters, null);
 
-    public PrioFast<THandle> AddClasslessChild<TChild>(THandle childHandle, int priority, Action<SimplePredicateBuilder> configureClassification, Action<TChild> configureChild)
-        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore(childHandle, priority, configureClassification, configureChild);
+    public PrioFast<THandle> AddClasslessChild<TChild>(THandle childHandle, int priority, Action<IFilterManager> configureFilters, Action<TChild> configureChild)
+        where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild> => AddClasslessChildCore(childHandle, priority, configureFilters, configureChild);
 
-    private PrioFast<THandle> AddClasslessChildCore<TChild>(THandle childHandle, int priority, Action<SimplePredicateBuilder>? configureClassification, Action<TChild>? configureChild)
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_PROXY)]
+    private PrioFast<THandle> AddClasslessChildCore<TChild>(THandle childHandle, int priority, Action<IFilterManager>? configureFilters, Action<TChild>? configureChild)
         where TChild : ClasslessQdiscBuilder<TChild>, IClasslessQdiscBuilder<TChild>
     {
         if (_children.ContainsKey(priority))
@@ -89,14 +92,12 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
         {
             configureChild(childBuilder);
         }
-        Predicate<object?>? predicate = null;
-        if (configureClassification is not null)
+        FilterManager filters = new();
+        if (configureFilters is not null)
         {
-            SimplePredicateBuilder predicateBuilder = new();
-            configureClassification(predicateBuilder);
-            predicate = predicateBuilder.Compile();
+            configureFilters(filters);
         }
-        IClassifyingQdisc<THandle> qdisc = childBuilder.Build(childHandle, predicate);
+        IClassifyingQdisc<THandle> qdisc = childBuilder.Build(childHandle, filters);
         _children.Add(priority, qdisc);
         return this;
     }
@@ -109,7 +110,7 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
             throw new InvalidOperationException($"A child with priority {priority} has already been added.");
         }
 
-        ClassfulBuilder<THandle, SimplePredicateBuilder, TChild> childBuilder = new(childHandle, _context);
+        ClassfulBuilder<THandle, TChild> childBuilder = new(childHandle, _context);
         IClassfulQdisc<THandle> qdisc = childBuilder.Build();
         _children.Add(priority, qdisc);
         return this;
@@ -130,7 +131,7 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
         return this;
     }
 
-    public PrioFast<THandle> AddClassfulChild<TChild>(THandle childHandle, int priority, Action<ClassfulBuilder<THandle, SimplePredicateBuilder, TChild>> configureChild)
+    public PrioFast<THandle> AddClassfulChild<TChild>(THandle childHandle, int priority, Action<ClassfulBuilder<THandle, TChild>> configureChild)
         where TChild : ClassfulQdiscBuilder<TChild>, IClassfulQdiscBuilder<TChild>
     {
         if (_children.ContainsKey(priority))
@@ -138,7 +139,7 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
             throw new InvalidOperationException($"A child with priority {priority} has already been added.");
         }
 
-        ClassfulBuilder<THandle, SimplePredicateBuilder, TChild> childBuilder = new(childHandle, _context);
+        ClassfulBuilder<THandle, TChild> childBuilder = new(childHandle, _context);
         configureChild(childBuilder);
         IClassfulQdisc<THandle> qdisc = childBuilder.Build();
         _children.Add(priority, qdisc);
@@ -148,9 +149,10 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
     protected override IClassfulQdisc<THandle> BuildInternal(THandle handle)
     {
         _localQueueBuilder ??= Fifo.CreateBuilder(_context);
-        IClassifyingQdisc<THandle>[] children = _children.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value).ToArray();
+        IClassifyingQdisc<THandle>[] children = [.. _children.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value)];
+        MatchAllFilter.Instance.ApplyIfUninitialized(ref _filters);
         return _expectHighContention
-            ? new PrioFastBitmapQdisc<THandle>(handle, _predicate, _localQueueBuilder, children, _context.MaximumConcurrency)
-            : new PrioFastLockingBitmapQdisc<THandle>(handle, _predicate, _localQueueBuilder, children, _context.MaximumConcurrency);
+            ? new PrioFastBitmapQdisc<THandle>(handle, _filters, _localQueueBuilder, children, _context.MaximumConcurrency)
+            : new PrioFastLockingBitmapQdisc<THandle>(handle, _filters, _localQueueBuilder, children, _context.MaximumConcurrency);
     }
 }

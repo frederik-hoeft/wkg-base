@@ -1,4 +1,5 @@
 ﻿using Cash.Diagnostic;
+using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -16,7 +17,7 @@ internal class ConstrainedFifoQdisc<THandle> : ClasslessQdisc<THandle>, IClassif
 
     private protected ulong _state;
 
-    public ConstrainedFifoQdisc(THandle handle, Predicate<object?>? predicate, int maxCount, ConstrainedPrioritizationOptions options) : base(handle, predicate)
+    public ConstrainedFifoQdisc(THandle handle, IFilterManager filters, int maxCount, ConstrainedPrioritizationOptions options) : base(handle, filters)
     {
         Debug.Assert(maxCount > 0);
         Debug.Assert(maxCount <= ushort.MaxValue);
@@ -150,15 +151,11 @@ internal class ConstrainedFifoQdisc<THandle> : ClasslessQdisc<THandle>, IClassif
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => false;
 
-    protected override bool ContainsChild(THandle handle) => false;
+    protected override bool CanClassify(object? state) => Filters.Match(state);
 
-    protected override bool CanClassify(object? state) => Predicate.Invoke(state);
-
-    protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload) => TryEnqueueDirect(state, workload);
-
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload)
+    protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
-        if (Predicate.Invoke(state))
+        if (Filters.Match(state))
         {
             EnqueueDirect(workload);
             return true;

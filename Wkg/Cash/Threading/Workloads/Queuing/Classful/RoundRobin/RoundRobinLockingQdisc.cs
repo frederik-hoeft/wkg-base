@@ -1,6 +1,7 @@
 ﻿using Cash.Common.Extensions;
 using Cash.Diagnostic;
 using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics.CodeAnalysis;
@@ -23,9 +24,9 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
     private IClassifyingQdisc<THandle>[] _children;
     private int _rrIndex;
 
-    public RoundRobinLockingQdisc(THandle handle, Predicate<object?>? predicate, IClasslessQdiscBuilder localQueueBuilder, int maxConcurrency) : base(handle, predicate)
+    public RoundRobinLockingQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, int maxConcurrency) : base(handle, filters)
     {
-        _localQueue = localQueueBuilder.BuildUnsafe(default(THandle), MatchNothingPredicate);
+        _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
         _localLasts = new IQdisc[maxConcurrency];
         _children = [_localQueue];
         _syncRoot = new Lock();
@@ -100,24 +101,8 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
         return false;
     }
 
-    protected override bool CanClassify(object? state)
-    {
-        if (Predicate.Invoke(state))
-        {
-            return true;
-        }
-        lock (_syncRoot)
-        {
-            for (int i = 0; i < _children.Length; i++)
-            {
-                if (_children[i].CanClassify(state))
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
+    // no need to recurse, as we are the superset of the filters of all children (match-all if no children match)
+    protected override bool CanClassify(object? state) => Filters.Match(state);
 
     protected override bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload)
     {
@@ -142,6 +127,10 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
 
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
+        if (!Filters.Match(state))
+        {
+            return false;
+        }
         lock (_syncRoot)
         {
             for (int i = 1; i < _children.Length; i++)
@@ -151,8 +140,9 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
                     return true;
                 }
             }
+            EnqueueDirect(workload);
+            return true;
         }
-        return TryEnqueueDirect(state, workload);
     }
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path)
@@ -174,16 +164,6 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
                     return true;
                 }
             }
-        }
-        return false;
-    }
-
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload)
-    {
-        if (Predicate.Invoke(state))
-        {
-            EnqueueDirect(workload);
-            return true;
         }
         return false;
     }
@@ -274,11 +254,7 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
     }
 
     /// <inheritdoc/>
-    protected override bool ContainsChild(THandle handle) =>
-        TryFindChild(handle, out _);
-
-    /// <inheritdoc/>
-    protected override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
+    public override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
     {
         lock (_syncRoot)
         {

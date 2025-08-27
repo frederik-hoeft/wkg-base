@@ -2,10 +2,11 @@
 using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics.CodeAnalysis;
 using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classification;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.LatestOnly;
 
-internal class LatestOnlyQdisc<THandle>(THandle handle, Predicate<object?>? predicate) : ClassifyingQdisc<THandle>(handle, predicate) where THandle : unmanaged
+internal class LatestOnlyQdisc<THandle>(THandle handle, IFilterManager filters) : ClassifyingQdisc<THandle>(handle, filters) where THandle : unmanaged
 {
     private volatile AbstractWorkloadBase? _singleWorkload;
 
@@ -13,14 +14,16 @@ internal class LatestOnlyQdisc<THandle>(THandle handle, Predicate<object?>? pred
 
     public override int BestEffortCount => IsEmpty ? 0 : 1;
 
-    protected override bool CanClassify(object? state) => Predicate.Invoke(state);
+    protected override bool CanClassify(object? state) => Filters.Match(state);
 
-    protected override bool ContainsChild(THandle handle) => false;
+    public override bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child)
+    {
+        child = null;
+        return false;
+    }
 
     protected override void EnqueueDirect(AbstractWorkloadBase workload)
     {
-        // TODO: parent qdiscs may buffer workloads. That is not within our control.
-        // they honestly shouldn't, but we can't guarantee that they won't (e.g., GfqQdisc)
         if (TryBindWorkload(workload))
         {
             AbstractWorkloadBase? old = Interlocked.Exchange(ref _singleWorkload, workload);
@@ -54,7 +57,7 @@ internal class LatestOnlyQdisc<THandle>(THandle handle, Predicate<object?>? pred
 
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {
-        if (Predicate.Invoke(state))
+        if (Filters.Match(state))
         {
             EnqueueDirect(workload);
             return true;
@@ -63,8 +66,6 @@ internal class LatestOnlyQdisc<THandle>(THandle handle, Predicate<object?>? pred
     }
 
     protected override bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => false;
-
-    protected override bool TryEnqueueDirect(object? state, AbstractWorkloadBase workload) => TryEnqueue(state, workload);
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => false;
 
