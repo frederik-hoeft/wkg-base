@@ -1,6 +1,8 @@
-﻿namespace Cash.Threading.Workloads.Continuations;
+﻿using Cash.Threading.Workloads.Scheduling;
+
+namespace Cash.Threading.Workloads.Continuations;
 
 internal interface IWorkerLocalWorkloadContinuation
 {
-    void Invoke(AbstractWorkloadBase workload, int workerId);
+    void Invoke(AbstractWorkloadBase workload, WorkerContext? worker);
 }

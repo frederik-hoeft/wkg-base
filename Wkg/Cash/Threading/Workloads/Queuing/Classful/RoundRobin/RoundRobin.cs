@@ -58,7 +58,7 @@ public sealed class RoundRobin : ClassfulQdiscBuilder<RoundRobin>, IClassfulQdis
     {
         _localQueueBuilder ??= Fifo.CreateBuilder(_context);
         return _expectHighContention
-            ? new RoundRobinBitmapQdisc<THandle>(handle, filters, _localQueueBuilder, _context.MaximumConcurrency)
-            : new RoundRobinLockingQdisc<THandle>(handle, filters, _localQueueBuilder, _context.MaximumConcurrency);
+            ? new RoundRobinBitmapQdisc<THandle>(handle, filters, _localQueueBuilder)
+            : new RoundRobinLockingQdisc<THandle>(handle, filters, _localQueueBuilder);
     }
 }

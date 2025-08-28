@@ -3,6 +3,7 @@ using Cash.Threading.Workloads.Queuing.Routing;
 using System.Diagnostics.CodeAnalysis;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Scheduling;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.LatestOnly;
 
@@ -27,17 +28,8 @@ internal class LatestOnlyQdisc<THandle>(THandle handle, IFilterManager filters) 
         if (TryBindWorkload(workload))
         {
             AbstractWorkloadBase? old = Interlocked.Exchange(ref _singleWorkload, workload);
-            if (old is null)
-            {
-                // we only need to notify the scheduler if we have a new workload
-                // otherwise, as far as the scheduler is concerned, nothing has changed
-                NotifyWorkScheduled();
-            }
-            else
-            {
-                // we need to abort the old workload and invoke any continuations
-                old.InternalAbort();
-            }
+            // we need to abort the old workload and invoke any continuations
+            old?.InternalAbort();
         }
         else if (workload.IsCompleted)
         {
@@ -49,7 +41,7 @@ internal class LatestOnlyQdisc<THandle>(THandle handle, IFilterManager filters) 
         }
     }
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         workload = Interlocked.Exchange(ref _singleWorkload, null);
         return workload is not null;
@@ -69,7 +61,7 @@ internal class LatestOnlyQdisc<THandle>(THandle handle, IFilterManager filters) 
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => false;
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         workload = _singleWorkload;
         return workload is not null;

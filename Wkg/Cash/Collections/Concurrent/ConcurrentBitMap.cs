@@ -218,7 +218,7 @@ public sealed class ConcurrentBitmap : IDisposable, IParentNode
 
     /// <inheritdoc cref="IsBitSet(int)"/>
     /// <remarks>
-    /// <see langword="WARNING"/>: This method does not perform any bounds checking. It is the caller's responsibility to ensure that the index is in range (0 &lt;= index &lt; <see cref="Length"/>).
+    /// <see langword="WARNING"/>: This method does not perform any bounds checking. It is the caller's responsibility to ensure that the index is in range (0 &lt;= index &lt; <see cref="Length"/>) and that no restructuring operations are performed concurrently (e.g., via <see cref="InsertBitAt(int, bool, bool)"/>, <see cref="RemoveBitAt(int, bool)"/>, <see cref="Grow(int)"/>, or <see cref="Shrink(int)"/>)."/>
     /// </remarks>
     public bool IsBitSetUnsafe(int index)
     {
@@ -227,17 +227,17 @@ public sealed class ConcurrentBitmap : IDisposable, IParentNode
     }
 
     /// <summary>
-    /// Updates the bit at the specified <paramref name="index"/> to the specified <paramref name="value"/>.
+    /// Updates the bit at the specified <paramref name="index"/> to the specified <paramref name="isSet"/>.
     /// </summary>
     /// <param name="index">The index of the bit to update.</param>
-    /// <param name="value">The value to set the bit to.</param>
-    public void UpdateBit(int index, bool value)
+    /// <param name="isSet">The value to set the bit to.</param>
+    public void UpdateBit(int index, bool isSet)
     {
         Throw.ArgumentOutOfRangeException.IfNotInRange(index, 0, Length - 1, nameof(index));
 
         // sync root is only used in write mode only when restructuring the tree or operating on cross-node boundaries
         using ILockOwnership readLock = SyncRoot.AcquireReadLock();
-        _root.UpdateBit(index, value, out _);
+        _root.UpdateBit(index, isSet, out _);
     }
 
     /// <inheritdoc cref="UpdateBit(int, bool)"/>
@@ -265,13 +265,13 @@ public sealed class ConcurrentBitmap : IDisposable, IParentNode
         Throw.ArgumentOutOfRangeException.IfNotInRange(index, 0, Length - 1, nameof(index));
 
         // sync root is only used in write mode when restructuring the tree or operating on cross-node boundaries
-        using ILockOwnership readLock = SyncRoot.AcquireWriteLock();
+        using ILockOwnership readLock = SyncRoot.AcquireReadLock();
         return _root.TryUpdateBit(index, token, value, out _);
     }
 
     /// <inheritdoc cref="TryUpdateBit(int, byte, bool)"/>
     /// <remarks>
-    /// <see langword="WARNING"/>: This method does not perform any bounds checking. It is the caller's responsibility to ensure that the index is in range (0 &lt;= index &lt; <see cref="Length"/>).
+    /// <see langword="WARNING"/>: This method does not perform any bounds checking. It is the caller's responsibility to ensure that the index is in range (0 &lt;= index &lt; <see cref="Length"/>) and that no restructuring operations are performed concurrently (e.g., via <see cref="InsertBitAt(int, bool, bool)"/>, <see cref="RemoveBitAt(int, bool)"/>, <see cref="Grow(int)"/>, or <see cref="Shrink(int)"/>)."/>
     /// </remarks>
     public bool TryUpdateBitUnsafe(int index, byte token, bool isSet)
     {

@@ -4,7 +4,9 @@ using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Routing;
+using Cash.Threading.Workloads.Scheduling;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
@@ -14,28 +16,30 @@ namespace Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
 /// </summary>
 /// <typeparam name="THandle">The type of the handle.</typeparam>
 // TODO: we should add branch pruning here as a zero-cost optimization
-internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, IClassfulQdisc<THandle>
+internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, IClassfulQdisc<THandle>, IWorkerDataOwner
     where THandle : unmanaged
 {
+    private readonly int _instanceHash;
     private readonly Lock _syncRoot;
-    private readonly IQdisc?[] _localLasts;
     private readonly IClassifyingQdisc<THandle> _localQueue;
 
     private IClassifyingQdisc<THandle>[] _children;
     private int _rrIndex;
 
-    public RoundRobinLockingQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, int maxConcurrency) : base(handle, filters)
+    public RoundRobinLockingQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder) : base(handle, filters)
     {
         _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
-        _localLasts = new IQdisc[maxConcurrency];
         _children = [_localQueue];
         _syncRoot = new Lock();
+        _instanceHash = RuntimeHelpers.GetHashCode(this);
     }
 
-    protected override void OnInternalInitialize(INotifyWorkScheduled parentScheduler) =>
+    protected override void OnInternalInitialize(IWorkloadScheduler<THandle> scheduler) =>
         BindChildQdisc(_localQueue);
 
     public override bool IsEmpty => BestEffortCount == 0;
+
+    int IWorkerDataOwner.InstanceHash => _instanceHash;
 
     public override int BestEffortCount
     {
@@ -57,20 +61,21 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
     // workloads are always contained in leaf qdiscs. classful qdiscs always have at least one child qdisc by default.
     protected override bool TryRemoveInternal(AwaitableWorkload workload) => false;
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         lock (_syncRoot)
         {
-            if (backTrack && _localLasts[workerId] is not null && _localLasts[workerId]!.TryDequeueInternal(workerId, backTrack, out workload))
+            if (backTrack && worker.TryGetData(this, out IClassifyingQdisc<THandle>? lastQdisc) && lastQdisc.TryDequeueInternal(worker, backTrack, out workload))
             {
                 return true;
             }
             for (int i = 0; i < _children.Length; i++, _rrIndex = (_rrIndex + 1) % _children.Length)
             {
                 IClassifyingQdisc<THandle> child = _children[_rrIndex];
-                if (child.TryDequeueInternal(workerId, backTrack, out workload))
+                if (child.TryDequeueInternal(worker, backTrack, out workload))
                 {
-                    _localLasts[workerId] = child;
+                    // remember the last qdisc we dequeued from for this worker
+                    worker.SetData(this, child);
                     _rrIndex = (_rrIndex + 1) % _children.Length;
                     return true;
                 }
@@ -80,19 +85,14 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
         return false;
     }
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         lock (_syncRoot)
         {
-            if (_localLasts[workerId] is not null && _localLasts[workerId]!.TryPeekUnsafe(workerId, out workload))
-            {
-                return true;
-            }
             for (int i = 0; i < _children.Length; i++)
             {
-                if (_children[i].TryPeekUnsafe(workerId, out workload))
+                if (_children[i].TryPeekUnsafe(worker, out workload))
                 {
-                    _localLasts[workerId] = _children[i];
                     return true;
                 }
             }
@@ -188,8 +188,8 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
                 return false;
             }
 
-            // link the child qdisc to the parent qdisc first
-            child.InternalInitialize(this);
+            // bind the child to the same scheduler as us
+            BindChildQdisc(child);
 
             IClassifyingQdisc<THandle>[] children = _children;
             _children = [.. children, child];
@@ -234,7 +234,8 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
             // this may break the intended scheduling order, but it is better than losing workloads
             // also that is acceptable, as it should happen very rarely and only if the user is doing something wrong
             // we simply impersonate worker 0 here, as we have exclusive access to the child qdisc anyway
-            while (child.TryDequeueInternal(0, false, out AbstractWorkloadBase? workload))
+            WorkerContext impersonatedWorker = new(id: 0);
+            while (child.TryDequeueInternal(impersonatedWorker, backTrack: false, out AbstractWorkloadBase? workload))
             {
                 // enqueue the workloads in the local queue
                 _localQueue.Enqueue(workload);
@@ -276,20 +277,17 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
         }
     }
 
-    protected override void OnWorkerTerminated(int workerId)
+    protected override void OnWorkerTerminated(WorkerContext worker)
     {
-        // reset the last child qdisc for this worker
-        Volatile.Write(ref _localLasts[workerId], null);
-
         // forward to children, no lock needed. if children are removed then they don't need to be notified
         // and if new children are added, they shouldn't know about the worker anyway
         IClassifyingQdisc<THandle>[] children = _children;
         for (int i = 0; i < children.Length; i++)
         {
-            children[i].OnWorkerTerminated(workerId);
+            children[i].OnWorkerTerminated(worker);
         }
 
-        base.OnWorkerTerminated(workerId);
+        base.OnWorkerTerminated(worker);
     }
 
     protected override void DisposeManaged()
@@ -299,8 +297,7 @@ internal sealed class RoundRobinLockingQdisc<THandle> : ClassfulQdisc<THandle>, 
             child.Complete();
             child.Dispose();
         }
-        _localLasts.AsSpan().Clear();
-        _children = [];
+        _children.AsSpan().Clear();
 
         base.DisposeManaged();
     }

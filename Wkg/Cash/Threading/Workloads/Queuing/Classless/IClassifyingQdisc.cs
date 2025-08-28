@@ -14,8 +14,6 @@ namespace Cash.Threading.Workloads.Queuing.Classless;
 /// </remarks>
 public interface IClassifyingQdisc : IQdisc
 {
-    internal INotifyWorkScheduled ParentScheduler { get; }
-
     internal bool IsCompleted { get; }
 
     IFilterManager Filters { get; }
@@ -86,7 +84,7 @@ public interface IClassifyingQdisc<THandle> : IClassifyingQdisc, IQdisc<THandle>
     /// <remarks>
     /// Qdiscs may override this method to perform additional operations, such as emptiness state updates, before the workload is enqueued to the qdisc or any of its children.
     /// </remarks>
-    internal void WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload);
+    internal void OnEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload);
 
     /// <summary>
     /// Attempts to find the route to the child with the given handle.

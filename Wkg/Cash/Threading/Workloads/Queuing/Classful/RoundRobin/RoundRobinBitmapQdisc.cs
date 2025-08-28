@@ -10,6 +10,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Scheduling;
+using System.Runtime.CompilerServices;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
 
@@ -17,31 +19,31 @@ namespace Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
 /// A classful qdisc that implements the Round Robin scheduling algorithm to dequeue workloads from its children.
 /// </summary>
 /// <typeparam name="THandle">The type of the handle.</typeparam>
-internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, IClassfulQdisc<THandle>
+internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, IClassfulQdisc<THandle>, IWorkerDataOwner
     where THandle : unmanaged
 {
-    private readonly ThreadLocal<int?> _th_lastEnqueuedChildIndex = new();
-
-    private readonly IQdisc?[] _localLasts;
+    private readonly int _instanceHash;
     private readonly IClassifyingQdisc<THandle> _localQueue;
-
-    private volatile IClassifyingQdisc<THandle>[] _children;
     private readonly ReaderWriterLockSlim _childrenLock;
     private readonly ConcurrentBitmap _dataMap;
+
+    private volatile IClassifyingQdisc<THandle>[] _children;
     private int _rrIndex;
     private int _maxRoutingPathDepthEncountered = 4;
 
-    public RoundRobinBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, int maxConcurrency) : base(handle, filters)
+    public RoundRobinBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder) : base(handle, filters)
     {
         _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
-        _localLasts = new IQdisc[maxConcurrency];
         _children = [_localQueue];
         _childrenLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
         _dataMap = new ConcurrentBitmap(1);
+        _instanceHash = RuntimeHelpers.GetHashCode(this);
     }
 
-    protected override void OnInternalInitialize(INotifyWorkScheduled parentScheduler) =>
+    protected override void OnInternalInitialize(IWorkloadScheduler<THandle> scheduler) =>
         BindChildQdisc(_localQueue);
+
+    int IWorkerDataOwner.InstanceHash => _instanceHash;
 
     public override bool IsEmpty
     {
@@ -81,7 +83,7 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
     // workloads are always contained in leaf qdiscs. classful qdiscs always have at least one child qdisc by default.
     protected override bool TryRemoveInternal(AwaitableWorkload workload) => false;
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         using ILockOwnership readLock = _childrenLock.AcquireReadLock();
         if (IsEmptyInternal)
@@ -94,9 +96,9 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
         // if we have to backtrack, we can do so by dequeuing from the last child qdisc
         // that was dequeued from. If the last child qdisc is empty, we can't backtrack and continue
         // with the next child qdisc.
-        if (backTrack && _localLasts[workerId]?.TryDequeueInternal(workerId, backTrack, out workload) is true)
+        if (backTrack && worker.TryGetData(this, out IClassifyingQdisc<THandle>? lastQdisc) && lastQdisc.TryDequeueInternal(worker, backTrack, out workload))
         {
-            DebugLog.WriteDiagnostic($"{this} Backtracking to last child qdisc {_localLasts[workerId]!.GetType().Name} ({_localLasts[workerId]}).");
+            DebugLog.WriteDiagnostic($"{this} Backtracking to last child qdisc {lastQdisc.GetType().Name} ({lastQdisc}).");
             return true;
         }
         // backtracking failed, or was not requested. We need to iterate over all child qdiscs.
@@ -111,7 +113,7 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
                 // skip empty children
                 continue;
             }
-            IQdisc qdisc = children[index];
+            IClassifyingQdisc<THandle> qdisc = children[index];
             // usually we should succeed first try, so we use the existing token from our read earlier
             byte token = bitInfo.Token;
             int i = 0;
@@ -124,11 +126,11 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
                     token = _dataMap.GetTokenUnsafe(index);
                 }
                 // get our assigned child qdisc
-                if (qdisc.TryDequeueInternal(workerId, backTrack, out workload))
+                if (qdisc.TryDequeueInternal(worker, backTrack, out workload))
                 {
                     DebugLog.WriteDiagnostic($"{this} Dequeued workload from child qdisc {qdisc}.");
                     // we found a workload, update the last child qdisc and reset the empty counter
-                    _localLasts[workerId] = qdisc;
+                    worker.SetData(this, qdisc);
                     return true;
                 }
                 // the child seems to be empty, but we can't be sure.
@@ -144,7 +146,7 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
         return false;
     }
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         using ILockOwnership readLock = _childrenLock.AcquireReadLock();
         if (IsEmptyInternal)
@@ -165,7 +167,7 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
             for (i = 0; i < children.Length; i++, index = (index + 1) % children.Length)
             {
                 // we can use the unsafe version here, since we are holding a read lock (the bitmap structure won't change)
-                if (_dataMap.IsBitSetUnsafe(i) && children[index].TryPeekUnsafe(workerId, out workload))
+                if (_dataMap.IsBitSetUnsafe(i) && children[index].TryPeekUnsafe(worker, out workload))
                 {
                     return true;
                 }
@@ -211,10 +213,10 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
             IClassifyingQdisc<THandle> child = children[i];
             if (child.Handle.Equals(handle))
             {
-                // set up the index of the child that we will enqueue to to allow emptiness tracking to update the correct bit
-                _th_lastEnqueuedChildIndex.Value = i;
                 child.Enqueue(workload);
                 DebugLog.WriteDiagnostic($"Enqueued workload {workload} to child qdisc {child}.");
+                // update the emptiness tracking
+                PostWorkScheduled(i);
                 goto SUCCESS;
             }
             // we must first check if the child can enqueue the workload.
@@ -227,21 +229,18 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
                 // ensure that the path is complete and valid
                 WorkloadSchedulingException.ThrowIfRoutingPathLeafIsInvalid(path.Leaf, handle);
 
-                // update the emptiness tracking
-                // the actual reset happens in the OnWorkScheduled callback, but we need to
-                // set up the index of the child that was just enqueued to for that
-                _th_lastEnqueuedChildIndex.Value = i;
-
-                // we need to call WillEnqueueFromRoutingPath on all nodes in the path
+                // enqueue the workload to the leaf
+                path.Leaf.Enqueue(workload);
+                // we need to call OnEnqueueFromRoutingPath on all nodes in the path
                 // failure to do so may result in incorrect emptiness tracking of the child qdiscs
                 foreach (ref readonly RoutingPathNode<THandle> node in path)
                 {
-                    node.Qdisc.WillEnqueueFromRoutingPath(in node, workload);
+                    node.Qdisc.OnEnqueueFromRoutingPath(in node, workload);
                 }
-                // enqueue the workload to the leaf
-                path.Leaf.Enqueue(workload);
                 Atomic.WriteMaxFast(ref _maxRoutingPathDepthEncountered, path.Count);
                 DebugLog.WriteDiagnostic($"{this}: enqueued workload {workload} to child {child}.");
+                // update the emptiness tracking
+                PostWorkScheduled(i);
                 goto SUCCESS;
             }
         }
@@ -271,10 +270,6 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
                 IClassifyingQdisc<THandle> child = children[i];
                 if (child.CanClassify(state))
                 {
-                    // update the emptiness tracking
-                    // the actual reset happens in the OnWorkScheduled callback, but we need to
-                    // set up the index of the child that was just enqueued to for that
-                    _th_lastEnqueuedChildIndex.Value = i;
                     if (!child.TryEnqueue(state, workload))
                     {
                         // this should never happen, as we already checked if the child can classify the workload
@@ -285,6 +280,8 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
                         throw exception;
                     }
                     DebugLog.WriteDiagnostic($"{this}: enqueued workload {workload} to child {child}.");
+                    // update the emptiness tracking
+                    PostWorkScheduled(i);
                     return true;
                 }
             }
@@ -316,56 +313,33 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
         return false;
     }
 
-    protected override void WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload)
+    protected override void OnEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload)
     {
+        using ILockOwnership readLock = _childrenLock.AcquireReadLock();
+
         int index = routingPathNode.Offset;
-        _th_lastEnqueuedChildIndex.Value = index;
-        DebugLog.WriteDiagnostic($"{this}: expecting to enqueue workload {workload} to child {_children[index]} via routing path.");
+        DebugLog.WriteDiagnostic($"{this}: enqueued workload {workload} to child {_children[index]} via routing path.");
+        PostWorkScheduled(index);
     }
 
     protected override void EnqueueDirect(AbstractWorkloadBase workload)
     {
-        // the local queue is a qdisc itself, so we can enqueue directly to it
-        // it will call back to us with OnWorkScheduled, so we can reset the empty counter there
         // we will never need a lock here, since the local queue itself is thread-safe and cannot
         // be removed from the children array.
         const int LOCAL_QUEUE_INDEX = 0;
-        _th_lastEnqueuedChildIndex.Value = LOCAL_QUEUE_INDEX;
         _localQueue.Enqueue(workload);
         DebugLog.WriteDiagnostic($"{this}: enqueued workload {workload} to local queue ({_localQueue}).");
+        PostWorkScheduled(LOCAL_QUEUE_INDEX);
     }
 
-    /// <inheritdoc/>
-    protected override void OnWorkScheduled()
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void PostWorkScheduled(int index)
     {
-        if (_childrenLock.IsWriteLockHeld)
-        {
-            // we are inside a callback from some child modification method
-            // we don't need to do anything here, as the child modification method will take care of the emptiness tracking
-            // we must also break the notification chain here, as no "real" enqueueing operation happened
-            return;
-        }
-        // we are inside a callback of an enqueuing thread
-        // load the index of the child that was just enqueued to
-        int? lastEnqueuedChildIndex = _th_lastEnqueuedChildIndex.Value;
-        if (lastEnqueuedChildIndex is null)
-        {
-            // this should never happen, as this method can only be part of the enqueueing call stack
-            WorkloadSchedulingException exception = WorkloadSchedulingException.CreateVirtual($"Scheduler inconsistency: {nameof(_th_lastEnqueuedChildIndex)} is null.");
-            DebugLog.WriteException(exception);
-            // we can actually just throw here, since we aren't in a worker thread
-            throw new NotSupportedException("This scheduler does not support scheduling workloads directly onto child qdiscs. Please use the methods provided by the parent workload factory.", exception);
-        }
-        // clear the empty flag for the child that was just enqueued to
-        int index = lastEnqueuedChildIndex.Value;
         // no token is required, as we just force the bit to be set, we can use the unsafe version here since a parent of our call stack must be holding a read lock
         // worker threads attempting to mark this child as empty will just fail to do so as their token will be invalidated by us
         // so no ABA problem here (not empty -> worker finds no workload -> we set it to not empty -> worker tries to set it to empty -> worker fails)
         _dataMap.UpdateBitUnsafe(index, isSet: true);
-        // reset the last enqueued child index
-        _th_lastEnqueuedChildIndex.Value = null;
         DebugLog.WriteDebug($"{this}: cleared empty flag for {(index == 0 ? this : _children[index])}.");
-        base.OnWorkScheduled();
     }
 
     public override bool TryAddChild(IClassifyingQdisc<THandle> child)
@@ -379,8 +353,8 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
             return false;
         }
 
-        // link the child qdisc to the parent qdisc first
-        child.InternalInitialize(this);
+        // bind the child qdisc to our scheduler
+        BindChildQdisc(child);
 
         // no lock needed, a new array is created and the reference is CASed in
         // contention is unlikely, since this method is only called when a new child qdisc is created
@@ -437,7 +411,8 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
         // also that is acceptable, as it should happen very rarely and only if the user is doing something wrong
         // we simply impersonate worker 0 here, as we have exclusive access to the child qdisc anyway
         bool childHasWorkloads = false;
-        while (child.TryDequeueInternal(0, false, out AbstractWorkloadBase? workload))
+        WorkerContext cleanupWorker = new(id: 0);
+        while (child.TryDequeueInternal(cleanupWorker, false, out AbstractWorkloadBase? workload))
         {
             // enqueue the workloads in the local queue
             _localQueue.Enqueue(workload);
@@ -498,20 +473,17 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
         return false;
     }
 
-    protected override void OnWorkerTerminated(int workerId)
+    protected override void OnWorkerTerminated(WorkerContext worker)
     {
-        // reset the last child qdisc for this worker
-        Volatile.Write(ref _localLasts[workerId], null);
-
         // forward to children, no lock needed. if children are removed then they don't need to be notified
         // and if new children are added, they shouldn't know about the worker anyway
         IClassifyingQdisc<THandle>[] children = _children;
         for (int i = 0; i < children.Length; i++)
         {
-            children[i].OnWorkerTerminated(workerId);
+            children[i].OnWorkerTerminated(worker);
         }
 
-        base.OnWorkerTerminated(workerId);
+        base.OnWorkerTerminated(worker);
     }
 
     protected override void DisposeManaged()
@@ -523,7 +495,6 @@ internal sealed class RoundRobinBitmapQdisc<THandle> : ClassfulQdisc<THandle>, I
             child.Complete();
             child.Dispose();
         }
-        _localLasts.AsSpan().Clear();
 
         base.DisposeManaged();
     }

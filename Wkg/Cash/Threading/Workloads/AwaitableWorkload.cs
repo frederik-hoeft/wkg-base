@@ -2,12 +2,12 @@
 using Cash.Threading.Workloads.Continuations;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Queuing;
+using Cash.Threading.Workloads.Scheduling;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using CommonFlags = Cash.Threading.Workloads.WorkloadStatus.CommonFlags;
 
 namespace Cash.Threading.Workloads;
-
-using CommonFlags = WorkloadStatus.CommonFlags;
 
 /// <summary>
 /// Represents a workload that can be awaited and supports cancellation.
@@ -186,7 +186,7 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
         }
         if (!ContinuationsInvoked)
         {
-            InternalRunContinuations(-1);
+            InternalRunContinuations(worker: null);
         }
     }
 
@@ -237,7 +237,7 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
             SetFaultedResultUnsafe(exception);
         }
         // this workload failed. we need to run continuations
-        InternalRunContinuations(-1);
+        InternalRunContinuations(worker: null);
         return false;
     }
 
@@ -306,7 +306,7 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
     /// </summary>
     internal void UnbindQdiscUnsafe() => Volatile.Write(ref _qdisc, s_qdiscCompletionSentinel);
 
-    internal override void InternalRunContinuations(int workerId)
+    internal override void InternalRunContinuations(WorkerContext? worker)
     {
         // unregister the cancellation token registration if necessary
         if (_cancellationTokenRegistration.HasValue)
@@ -315,7 +315,7 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
             DebugLog.WriteDiagnostic($"{this}: Unregistered cancellation token registration.");
         }
 
-        base.InternalRunContinuations(workerId);
+        base.InternalRunContinuations(worker);
     }
 
     /// <summary>
@@ -484,20 +484,18 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
 
     private protected sealed class QdiscCompletionSentinel : IQdisc
     {
-        private const string MESSAGE = "Internal error: Qdisc completion sentinel should never be accessed. This is a bug. Please report this issue.";
         bool IQdisc.IsEmpty => ThrowHelper<bool>();
         int IQdisc.BestEffortCount => ThrowHelper<int>();
-        bool IQdisc.TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => (workload = null) is null && ThrowHelper<bool>();
+        bool IQdisc.TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => (workload = null) is null && ThrowHelper<bool>();
         bool IQdisc.TryRemoveInternal(AwaitableWorkload workload) => ThrowHelper<bool>();
-        void IQdisc.InternalInitialize(INotifyWorkScheduled parentScheduler) => ThrowHelper<bool>();
         void IQdisc.Complete() => ThrowHelper<bool>();
-        void IQdisc.OnWorkerTerminated(int workerId) => ThrowHelper<bool>();
+        void IQdisc.OnWorkerTerminated(WorkerContext worker) => ThrowHelper<bool>();
         string IQdisc.ToTreeString() => ThrowHelper<string>();
-        bool IQdisc.TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => (workload = null) is null && ThrowHelper<bool>();
+        bool IQdisc.TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => (workload = null) is null && ThrowHelper<bool>();
         void IDisposable.Dispose() => ThrowHelper<bool>();
 
         [DoesNotReturn]
         [StackTraceHidden]
-        private static T ThrowHelper<T>() => throw new WorkloadSchedulingException(MESSAGE);
+        private static T ThrowHelper<T>() => throw new WorkloadSchedulingException(SR.ThreadingWorkloads_Workload_NotBound);
     }
 }

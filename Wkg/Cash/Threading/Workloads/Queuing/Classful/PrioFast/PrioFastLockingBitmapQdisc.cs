@@ -4,8 +4,10 @@ using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Routing;
+using Cash.Threading.Workloads.Scheduling;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Cash.Threading.Workloads.Queuing.Classful.PrioFast;
@@ -14,30 +16,32 @@ namespace Cash.Threading.Workloads.Queuing.Classful.PrioFast;
 /// A classful qdisc that implements a simple priority scheduling algorithm to dequeue workloads from its children. Works best for low contention and flat hierarchies.
 /// </summary>
 /// <typeparam name="THandle">The type of the handle.</typeparam>
-internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandle>, IClassfulQdisc<THandle>
+internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandle>, IClassfulQdisc<THandle>, IWorkerDataOwner
     where THandle : unmanaged
 {
+    private readonly int _instanceHash;
     private readonly Lock _syncRoot = new();
     private readonly BitArray _dataMap;
-    private readonly IQdisc?[] _localLasts;
     private readonly IClassifyingQdisc<THandle> _localQueue;
     private readonly IClassifyingQdisc<THandle>[] _children;
 
-    public PrioFastLockingBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, IClassifyingQdisc<THandle>[] children, int maxConcurrency) 
+    public PrioFastLockingBitmapQdisc(THandle handle, IFilterManager filters, IClasslessQdiscBuilder localQueueBuilder, IClassifyingQdisc<THandle>[] children) 
         : base(handle, filters)
     {
         _localQueue = localQueueBuilder.BuildUnsafe(handle: default(THandle), filters: null);
-        _localLasts = new IQdisc[maxConcurrency];
         foreach (IClassifyingQdisc<THandle> child in children)
         {
             BindChildQdisc(child);
         }
         _children = [_localQueue, .. children];
         _dataMap = new BitArray(_children.Length);
+        _instanceHash = RuntimeHelpers.GetHashCode(this);
     }
 
-    protected override void OnInternalInitialize(INotifyWorkScheduled parentScheduler) =>
+    protected override void OnInternalInitialize(IWorkloadScheduler<THandle> scheduler) =>
         BindChildQdisc(_localQueue);
+
+    int IWorkerDataOwner.InstanceHash => _instanceHash;
 
     public override bool IsEmpty
     {
@@ -77,14 +81,14 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
     // method is only called on the direct parent of a workload.
     protected override bool TryRemoveInternal(AwaitableWorkload workload) => false;
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         // if we have to backtrack, we can do so by dequeuing from the last child qdisc
         // that was dequeued from. If the last child qdisc is empty, we can't backtrack and continue
         // with the next child qdisc.
-        if (backTrack && _localLasts[workerId]?.TryDequeueInternal(workerId, backTrack, out workload) is true)
+        if (backTrack && worker.TryGetData(this, out IClassifyingQdisc<THandle>? lastQdisc) && lastQdisc.TryDequeueInternal(worker, backTrack, out workload))
         {
-            DebugLog.WriteDiagnostic($"{this} Backtracking to last child qdisc {_localLasts[workerId]!.GetType().Name} ({_localLasts[workerId]}).");
+            DebugLog.WriteDiagnostic($"{this} Backtracking to last child qdisc {lastQdisc.GetType().Name} ({lastQdisc}).");
             return true;
         }
         // backtracking failed, or was not requested. We need to iterate over all child qdiscs.
@@ -97,11 +101,11 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
                     // this child qdisc is empty, skip it
                     continue;
                 }
-                if (_children[index].TryDequeueInternal(workerId, backTrack, out workload))
+                if (_children[index].TryDequeueInternal(worker, backTrack, out workload))
                 {
                     DebugLog.WriteDiagnostic($"{this} Dequeued workload from child qdisc {_children[index]}.");
-                    // we found a workload, update the last child qdisc and reset the empty counter
-                    _localLasts[workerId] = _children[index];
+                    // we found a workload, update the last child qdisc
+                    worker.SetData(this, _children[index]);
                     return true;
                 }
                 // this child qdisc is empty, mark it as such
@@ -114,7 +118,7 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
         return false;
     }
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         lock (_syncRoot)
         {
@@ -125,7 +129,7 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
                     // this child qdisc is empty, skip it
                     continue;
                 }
-                if (_children[i].TryPeekUnsafe(workerId, out workload))
+                if (_children[i].TryPeekUnsafe(worker, out workload))
                 {
                     return true;
                 }
@@ -263,20 +267,17 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
         return false;
     }
 
-    protected override void OnWorkerTerminated(int workerId)
+    protected override void OnWorkerTerminated(WorkerContext worker)
     {
-        // reset the last child qdisc for this worker
-        Volatile.Write(ref _localLasts[workerId], null);
-
         // forward to children, no lock needed. if children are removed then they don't need to be notified
         // and if new children are added, they shouldn't know about the worker anyway
         IClassifyingQdisc<THandle>[] children = _children;
         for (int i = 0; i < children.Length; i++)
         {
-            children[i].OnWorkerTerminated(workerId);
+            children[i].OnWorkerTerminated(worker);
         }
 
-        base.OnWorkerTerminated(workerId);
+        base.OnWorkerTerminated(worker);
     }
 
     protected override void DisposeManaged()
@@ -286,7 +287,6 @@ internal sealed class PrioFastLockingBitmapQdisc<THandle> : ClassfulQdisc<THandl
             child.Complete();
             child.Dispose();
         }
-        _localLasts.AsSpan().Clear();
         base.DisposeManaged();
     }
 

@@ -1,4 +1,5 @@
 ﻿using Cash.Data.Pooling;
+using Cash.Threading.Workloads.Scheduling;
 
 namespace Cash.Threading.Workloads.WorkloadTypes;
 
@@ -24,9 +25,9 @@ internal sealed class AnonymousWorkloadImpl : AnonymousWorkload, IPoolable<Anony
 
     private protected override void ExecuteCore() => _action();
 
-    internal override void InternalRunContinuations(int workerId)
+    internal override void InternalRunContinuations(WorkerContext? worker)
     {
-        base.InternalRunContinuations(workerId);
+        base.InternalRunContinuations(worker);
 
         if (_pool is not null)
         {

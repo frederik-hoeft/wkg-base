@@ -1,6 +1,7 @@
 ﻿using Cash.Diagnostic;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Routing;
+using Cash.Threading.Workloads.Scheduling;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -101,7 +102,7 @@ internal class ConstrainedFifoQdisc<THandle> : ClasslessQdisc<THandle>, IClassif
         }
     }
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         // prioritize enqueuing or dequeuing based on the specified constrained options
         // use the alpha lock if we are minimizing workload cancellation (execute as much as possible)
@@ -128,7 +129,7 @@ internal class ConstrainedFifoQdisc<THandle> : ClasslessQdisc<THandle>, IClassif
         return true;
     }
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         ulong currentState;
         do
@@ -150,8 +151,6 @@ internal class ConstrainedFifoQdisc<THandle> : ClasslessQdisc<THandle>, IClassif
     protected override bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => false;
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => false;
-
-    protected override bool CanClassify(object? state) => Filters.Match(state);
 
     protected override bool TryEnqueue(object? state, AbstractWorkloadBase workload)
     {

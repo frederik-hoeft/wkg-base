@@ -152,7 +152,7 @@ public sealed class PrioFast<THandle> : CustomClassfulQdiscBuilder<THandle, Prio
         IClassifyingQdisc<THandle>[] children = [.. _children.OrderBy(kvp => kvp.Key).Select(kvp => kvp.Value)];
         MatchAllFilter.Instance.ApplyIfUninitialized(ref _filters);
         return _expectHighContention
-            ? new PrioFastBitmapQdisc<THandle>(handle, _filters, _localQueueBuilder, children, _context.MaximumConcurrency)
-            : new PrioFastLockingBitmapQdisc<THandle>(handle, _filters, _localQueueBuilder, children, _context.MaximumConcurrency);
+            ? new PrioFastBitmapQdisc<THandle>(handle, _filters, _localQueueBuilder, children)
+            : new PrioFastLockingBitmapQdisc<THandle>(handle, _filters, _localQueueBuilder, children);
     }
 }

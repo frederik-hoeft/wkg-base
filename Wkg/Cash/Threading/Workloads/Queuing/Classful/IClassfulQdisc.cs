@@ -2,7 +2,7 @@
 
 namespace Cash.Threading.Workloads.Queuing.Classful;
 
-public interface IClassfulQdisc<THandle> : IQdisc, INotifyWorkScheduled, IClassifyingQdisc<THandle>
+public interface IClassfulQdisc<THandle> : IQdisc, IClassifyingQdisc<THandle>
     where THandle : unmanaged
 {
     /// <summary>

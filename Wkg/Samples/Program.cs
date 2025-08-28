@@ -8,17 +8,15 @@
 using System.Diagnostics;
 using Cash.Threading.Workloads;
 using Cash.Threading.Workloads.Configuration;
-using Cash.Threading.Workloads.DependencyInjection.Implementations;
 using Cash.Threading.Workloads.Factories;
-using Cash.Threading.Workloads.Configuration.Classful;
-using Cash.Threading.Workloads.Queuing.Classful;
 using Cash.Threading.Workloads.Queuing.Classful.RoundRobin;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
-using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 using Cash.Threading.Workloads.Queuing.Classless.Lifo;
 using Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Configuration.Dispatcher;
+using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 
 //Stopwatch sw = Stopwatch.StartNew();
 //for (int i = 0; i < 1000; i++)
@@ -55,69 +53,73 @@ using Cash.Threading.Workloads.Queuing.Classification;
 //Log.WriteInfo("AAAAAAAAAAAAAAAA");
 //return;
 
-//using (ClassfulWorkloadFactory<QdiscType> clubmappFactory = WorkloadFactoryBuilder.Create<QdiscType>()
-//    // the root scheduler is allowed to run up to 4 workers at the same time
-//    .UseMaximumConcurrency(8)
-//    // async/await continuations will run in the same async context as the scheduling thread
-//    .FlowExecutionContextToContinuations()
-//    // async/await continuations will run with the same synchronization context (e.g, UI thread)
-//    .RunContinuationsOnCapturedContext()
-//    // anonymous workloads will be pooled and reused.
-//    // no allocations will be made up until more than 64 workloads are scheduled at the same time
-//    // note that this does not apply to awaitable workloads (e.g, workloads that return a result to the caller)
-//    // or to stateful workloads (e.g, workloads that capture state)
-//    .UseAnonymousWorkloadPooling(poolSize: 64)
-//    // the root scheduler will fairly dequeue workloads alternating between the two child schedulers (Round Robin)
-//    // a classifying root scheduler can have children and also allows dynamic assignment of workloads to child schedulers
-//    // based on some state object
-//    .UseClassfulRoot<RoundRobin>(QdiscType.RoundRobin, roundRobinClassBuilder => roundRobinClassBuilder
-//        .ConfigureFilters(filters => filters
-//            .AddNamedFilter<State>("RoundRobin", state => state.QdiscType == QdiscType.RoundRobin))
-//        // one child scheduler will dequeue workloads in a First In First Out manner
-//        .AddClasslessChild<Fifo>(QdiscType.Fifo)
-//        // the other child scheduler will dequeue workloads in a Last In First Out manner
-//        .AddClasslessChild<ConstrainedLifo>(QdiscType.Lifo, qdisc => qdisc
-//            .WithConstrainedPrioritizationOptions(ConstrainedPrioritizationOptions.MinimizeWorkloadCancellation)
-//            .WithCapacity(16))))
-//{
-//    const int LOOPS = 10_000;
-//    SharedInt sharedInt = new()
-//    {
-//        Value = LOOPS
-//    };
-//    using ManualResetEventSlim mres = new(false);
-//    for (int i = 0; i < LOOPS; i++)
-//    {
-//        clubmappFactory.Schedule(() =>
-//        {
-//            int result = Interlocked.Decrement(ref sharedInt.Value);
-//            if (result % 100000 == 0)
-//            {
-//                Log.WriteInfo($"Remaining: {result}");
-//            }
-//            if (result == 0)
-//            {
-//                Log.WriteInfo("All workloads have completed.");
-//                mres.Set();
-//            }
-//        });
-//    }
-//    mres.Wait();
-//    await clubmappFactory.ScheduleAsync(QdiscType.Fifo, flag =>
-//    {
-//        Log.WriteInfo("Starting background work...");
-//        for (int i = 0; i < 10; i++)
-//        {
-//            flag.ThrowIfCancellationRequested();
-//            Log.WriteDiagnostic($"doing work ...");
-//            Thread.Sleep(100);
-//        }
-//        Log.WriteInfo("Done with background work.");
-//    });
-//}
+TextWriterTraceListener myListener = new(Console.Out);
+Trace.Listeners.Add(myListener);
+
+using (ClassfulWorkloadFactory<QdiscType> clubmappFactory = WorkloadFactoryBuilder.Create<QdiscType>()
+    // the root scheduler is allowed to run up to 8 workers at the same time
+    .UseWorkloadDispatcher<BoundedWorkloadDispatcherFactory>(static dispatcher => dispatcher.UseMaximumConcurrency(8))
+    // async/await continuations will run in the same async context as the scheduling thread
+    .FlowExecutionContextToContinuations()
+    // async/await continuations will run with the same synchronization context (e.g, UI thread)
+    .RunContinuationsOnCapturedContext()
+    // anonymous workloads will be pooled and reused.
+    // no allocations will be made up until more than 64 workloads are scheduled at the same time
+    // note that this does not apply to awaitable workloads (e.g, workloads that return a result to the caller)
+    // or to stateful workloads (e.g, workloads that capture state)
+    .UseAnonymousWorkloadPooling(poolSize: 64)
+    // the root scheduler will fairly dequeue workloads alternating between the two child schedulers (Round Robin)
+    // a classifying root scheduler can have children and also allows dynamic assignment of workloads to child schedulers
+    // based on some state object
+    .UseClassfulRoot<RoundRobin>(QdiscType.RoundRobin, roundRobinClassBuilder => roundRobinClassBuilder
+        .ConfigureFilters(filters => filters
+            .AddNamedFilter<State>("RoundRobin", state => state.QdiscType == QdiscType.RoundRobin))
+        // one child scheduler will dequeue workloads in a First In First Out manner
+        .AddClasslessChild<Fifo>(QdiscType.Fifo)
+        // the other child scheduler will dequeue workloads in a Last In First Out manner
+        .AddClasslessChild<ConstrainedLifo>(QdiscType.Lifo, qdisc => qdisc
+            .WithConstrainedPrioritizationOptions(ConstrainedPrioritizationOptions.MinimizeWorkloadCancellation)
+            .WithCapacity(16))))
+{
+    const int LOOPS = 10_000;
+    SharedInt sharedInt = new()
+    {
+        Value = LOOPS
+    };
+    using ManualResetEventSlim mres = new(false);
+    for (int i = 0; i < LOOPS; i++)
+    {
+        clubmappFactory.Schedule(() =>
+        {
+            int result = Interlocked.Decrement(ref sharedInt.Value);
+            if (result % 100000 == 0)
+            {
+                Log.WriteInfo($"Remaining: {result}");
+            }
+            if (result == 0)
+            {
+                Log.WriteInfo("All workloads have completed.");
+                mres.Set();
+            }
+        });
+    }
+    mres.Wait();
+    await clubmappFactory.ScheduleAsync(QdiscType.Fifo, flag =>
+    {
+        Log.WriteInfo("Starting background work...");
+        for (int i = 0; i < 10; i++)
+        {
+            flag.ThrowIfCancellationRequested();
+            Log.WriteDiagnostic($"doing work ...");
+            Thread.Sleep(100);
+        }
+        Log.WriteInfo("Done with background work.");
+    });
+}
 
 using ClassfulWorkloadFactory<int> test = WorkloadFactoryBuilder.Create<int>()
-    .UseMaximumConcurrency(1)
+    .UseWorkloadDispatcher<BoundedWorkloadDispatcherFactory>(static dispatcher => dispatcher
+        .UseMaximumConcurrency(1))
     .UseAnonymousWorkloadPooling(poolSize: 16)
     .UseClassfulRoot<RoundRobin>(1, static root => root
         .AddClasslessChild<Fifo>(2, static filters => filters.AddNamedFilter<int>("even", static i => (i & 1) == 0))
@@ -130,14 +132,11 @@ ValueTask foo = test.ClassifyAllAsync(Enumerable.Range(0, 100), static async (da
 });
 Console.WriteLine(test.Root.ToTreeString());
 await foo;
-return;
-using ClassfulWorkloadFactoryWithDI<int> factory = WorkloadFactoryBuilder.Create<int>()
-    .UseMaximumConcurrency(2)
+using ClassfulWorkloadFactory<int> factory = WorkloadFactoryBuilder.Create<int>()
+    .UseWorkloadDispatcher<BoundedWorkloadDispatcherFactory>(static dispatcher => dispatcher
+        .UseMaximumConcurrency(2))
     .FlowExecutionContextToContinuations()
     .RunContinuationsOnCapturedContext()
-    .UseDependencyInjection<PooledWorkloadServiceProviderFactory>(services => services
-        .AddService<IMyService, MyService>(() => new MyService())
-        .AddService(() => new MyService()))
     .UseAnonymousWorkloadPooling(poolSize: 64)
     .UseClassfulRoot<RoundRobin>(1, root => root
         .ConfigureQdisc(roundRobin => roundRobin.WithLocalQueue<Fifo>())
@@ -219,7 +218,7 @@ Workload wl4 = factory.ScheduleAsync(flag =>
 {
     Log.WriteInfo($"Hello from the root scheduler again again again");
     Thread.Sleep(1000);
-    throw new Exception("This is an exception.");
+    throw new InvalidOperationException("This is an exception.");
 });
 
 WorkloadResult result4 = await wl4;
@@ -231,7 +230,7 @@ TaskWorkload taskwl = factory.ScheduleTaskAsync(async flag =>
     Log.WriteInfo($"Hello from the root scheduler from a Task!");
     await Task.Delay(1000);
     Log.WriteInfo($"Hello from the root scheduler from a Task! (after delay)");
-    throw new Exception("This is an exception.");
+    throw new InvalidOperationException("This is an exception.");
 });
 
 WorkloadResult taskResult = await taskwl;
@@ -340,7 +339,8 @@ await Workload.WhenAll(wls);
 Log.WriteFatal("DONE WITH TESTS");
 
 using ClasslessWorkloadFactory<int> simpleFactory = WorkloadFactoryBuilder.Create<int>()
-    .UseMaximumConcurrency(16)
+    .UseWorkloadDispatcher<BoundedWorkloadDispatcherFactory>(static dispatcher => dispatcher
+        .UseMaximumConcurrency(16))
     .FlowExecutionContextToContinuations()
     .RunContinuationsOnCapturedContext()
     .UseAnonymousWorkloadPooling(poolSize: 64)
@@ -404,23 +404,6 @@ internal class MySynchronizationContext : SynchronizationContext
         SetSynchronizationContext(this);
         d.Invoke(state);
     }, state);
-}
-
-internal interface IMyService
-{
-    int GetNext();
-}
-
-internal class MyService : IMyService
-{
-    private int _counter;
-
-    public MyService()
-    {
-        _counter = 0;
-    }
-
-    public int GetNext() => Interlocked.Increment(ref _counter);
 }
 
 internal enum SensorToS

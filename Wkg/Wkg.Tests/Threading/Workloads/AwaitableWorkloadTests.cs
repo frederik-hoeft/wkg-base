@@ -3,18 +3,19 @@ using Cash.Threading.Workloads.Factories;
 using Cash.Threading.Workloads.Configuration;
 using Cash.Threading.Workloads.Queuing.Classless.Fifo;
 using System.Diagnostics;
-using Cash.Threading.Workloads.Scheduling;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads;
+using Cash.Threading.Workloads.Configuration.Dispatcher;
+using Cash.Threading.Workloads.Scheduling.Dispatchers;
 
 namespace Cash.Tests.Threading.Workloads;
 
 [TestClass]
-public class AwaitableWorkloadTests
+public sealed class AwaitableWorkloadTests
 {
     private static ClasslessWorkloadFactory<int> CreateDefaultFactory() => WorkloadFactoryBuilder.Create<int>()
         .UseAnonymousWorkloadPooling(4)
-        .UseMaximumConcurrency(1)
+        .UseWorkloadDispatcher<BoundedWorkloadDispatcherFactory>(static dispatcher => dispatcher.UseMaximumConcurrency(1))
         .UseClasslessRoot<Fifo>(1);
 
     [TestMethod]
@@ -104,7 +105,7 @@ public class AwaitableWorkloadTests
         {
             Assert.IsTrue(result.IsSuccess);
             Assert.AreEqual(1, result.Result);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(BoundedWorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(TestContinueWith1)));
             mres.Set();
@@ -121,7 +122,7 @@ public class AwaitableWorkloadTests
         workload.ContinueWith(result =>
         {
             Assert.IsTrue(result.IsSuccess);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(BoundedWorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(TestContinueWith2)));
             mres.Set();
@@ -140,7 +141,7 @@ public class AwaitableWorkloadTests
         {
             Assert.IsTrue(result.IsSuccess);
             Assert.AreEqual(1, result.Result);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(BoundedWorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().Any(frame => frame.GetMethod()?.Name == nameof(TestContinueWithInline1)));
             mres.Set();
@@ -158,7 +159,7 @@ public class AwaitableWorkloadTests
         workload.ContinueWith(result =>
         {
             Assert.IsTrue(result.IsSuccess);
-            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(WorkloadDispatcher.WorkerLoop)));
+            Assert.IsTrue(new StackTrace().GetFrames().All(frame => frame.GetMethod()?.Name != nameof(BoundedWorkloadDispatcher.WorkerLoop)));
             // ensure that the continuation is invoked inline
             Assert.IsTrue(new StackTrace().GetFrames().Any(frame => frame.GetMethod()?.Name == nameof(TestContinueWithInline2)));
             mres.Set();
@@ -514,7 +515,7 @@ public class AwaitableWorkloadTests
     {
         using ClasslessWorkloadFactory<int> factory = CreateDefaultFactory();
         const string MESSAGE = "Test exception.";
-        Workload<int> workload = factory.ScheduleAsync<int>(_ => throw new Exception(MESSAGE));
+        Workload<int> workload = factory.ScheduleAsync<int>(_ => throw new InvalidOperationException(MESSAGE));
         WorkloadResult<int> result = await workload;
         Assert.AreEqual<WorkloadStatus>(WorkloadStatus.Faulted | WorkloadStatus.ContinuationsInvoked, workload.Status);
         Assert.IsTrue(result.IsFaulted);
@@ -528,7 +529,7 @@ public class AwaitableWorkloadTests
     {
         using ClasslessWorkloadFactory<int> factory = CreateDefaultFactory();
         const string MESSAGE = "Test exception.";
-        Workload workload = factory.ScheduleAsync(_ => throw new Exception(MESSAGE));
+        Workload workload = factory.ScheduleAsync(_ => throw new InvalidOperationException(MESSAGE));
         WorkloadResult result = await workload;
         Assert.AreEqual<WorkloadStatus>(WorkloadStatus.Faulted | WorkloadStatus.ContinuationsInvoked, workload.Status);
         Assert.IsTrue(result.IsFaulted);

@@ -3,6 +3,7 @@ using Cash.Threading.Workloads.Factories;
 using Cash.Threading.Workloads.Configuration;
 using Cash.Common.Extensions;
 using Cash.Threading.Workloads.Queuing.Classless.Fifo;
+using Cash.Threading.Workloads.Configuration.Dispatcher;
 
 namespace Cash.Tests.Threading.Workloads;
 
@@ -11,7 +12,7 @@ public class WorkloadSynchronizationContextTests
 {
     private static ClasslessWorkloadFactory<int> CreateDefaultFactory(bool continueOnCapturedContext, bool flowExecutionContext) => WorkloadFactoryBuilder.Create<int>()
         .UseAnonymousWorkloadPooling(4)
-        .UseMaximumConcurrency(1)
+        .UseWorkloadDispatcher<BoundedWorkloadDispatcherFactory>(static dispatcher => dispatcher.UseMaximumConcurrency(1))
         .FlowExecutionContextToContinuations(flowExecutionContext)
         .RunContinuationsOnCapturedContext(continueOnCapturedContext)
         .UseClasslessRoot<Fifo>(1);

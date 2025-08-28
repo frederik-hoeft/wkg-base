@@ -1,5 +1,6 @@
 ﻿using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Routing;
+using Cash.Threading.Workloads.Scheduling;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
@@ -19,7 +20,7 @@ internal sealed class LifoQdisc<THandle>(THandle handle, IFilterManager filters)
 
     protected override void EnqueueDirectLocal(AbstractWorkloadBase workload) => _stack.Push(workload);
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => 
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => 
         _stack.TryPop(out workload);
 
     protected override bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => false;
@@ -36,7 +37,7 @@ internal sealed class LifoQdisc<THandle>(THandle handle, IFilterManager filters)
 
     protected override bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => false;
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => _stack.TryPeek(out workload);
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => _stack.TryPeek(out workload);
 
     protected override bool TryRemoveInternal(AwaitableWorkload workload) => false;
 

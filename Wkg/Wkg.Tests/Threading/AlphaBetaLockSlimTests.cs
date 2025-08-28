@@ -46,7 +46,7 @@ public class AlphaBetaLockSlimTests
         abls.ExitBetaLock();
     }
 
-    [TestMethod, Timeout(10000)]
+    [TestMethod, Timeout(10000, CooperativeCancellation = true)]
     public void AlphasAreMutuallyExclusiveFromBetas()
     {
         using AlphaBetaLockSlim abls = new();
@@ -55,18 +55,18 @@ public class AlphaBetaLockSlimTests
             Task.Run(() =>
             {
                 abls.EnterAlphaLock();
-                barrier.SignalAndWait();
+                barrier.SignalAndWait(TestContext.CancellationTokenSource.Token);
                 Assert.IsTrue(abls.IsAlphaLockHeld);
-                barrier.SignalAndWait();
+                barrier.SignalAndWait(TestContext.CancellationTokenSource.Token);
                 abls.ExitAlphaLock();
-            }),
+            }, TestContext.CancellationTokenSource.Token),
             Task.Run(() =>
             {
-                barrier.SignalAndWait();
+                barrier.SignalAndWait(TestContext.CancellationTokenSource.Token);
                 Assert.IsFalse(abls.TryEnterBetaLock(0));
                 Assert.IsFalse(abls.IsBetaLockHeld);
-                barrier.SignalAndWait();
-            }));
+                barrier.SignalAndWait(TestContext.CancellationTokenSource.Token);
+            }, TestContext.CancellationTokenSource.Token));
     }
 
     [TestMethod, Timeout(10000)]
@@ -304,21 +304,21 @@ public class AlphaBetaLockSlimTests
     public void InvalidTimeouts()
     {
         using AlphaBetaLockSlim abls = new();
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => abls.TryEnterBetaLock(-2));
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(-3));
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(-4));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => abls.TryEnterBetaLock(-2));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(-3));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(-4));
 
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => abls.TryEnterBetaLock(TimeSpan.MaxValue));
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(TimeSpan.MinValue));
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(TimeSpan.FromMilliseconds(-2)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => abls.TryEnterBetaLock(TimeSpan.MaxValue));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(TimeSpan.MinValue));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => abls.TryEnterAlphaLock(TimeSpan.FromMilliseconds(-2)));
     }
 
     [TestMethod]
     public void InvalidExit()
     {
         using AlphaBetaLockSlim abls = new();
-        Assert.ThrowsException<SynchronizationLockException>(abls.ExitAlphaLock);
-        Assert.ThrowsException<SynchronizationLockException>(abls.ExitBetaLock);
+        Assert.ThrowsExactly<SynchronizationLockException>(abls.ExitAlphaLock);
+        Assert.ThrowsExactly<SynchronizationLockException>(abls.ExitBetaLock);
     }
 
     [TestMethod]
@@ -326,13 +326,13 @@ public class AlphaBetaLockSlimTests
     {
         using AlphaBetaLockSlim abls = new();
         abls.EnterAlphaLock();
-        Assert.ThrowsException<LockRecursionException>(() => abls.TryEnterAlphaLock(0));
-        Assert.ThrowsException<InvalidOperationException>(() => abls.TryEnterBetaLock(0));
+        Assert.ThrowsExactly<LockRecursionException>(() => abls.TryEnterAlphaLock(0));
+        Assert.ThrowsExactly<InvalidOperationException>(() => abls.TryEnterBetaLock(0));
         abls.ExitAlphaLock();
 
         abls.EnterBetaLock();
-        Assert.ThrowsException<InvalidOperationException>(() => abls.TryEnterAlphaLock(0));
-        Assert.ThrowsException<LockRecursionException>(() => abls.TryEnterBetaLock(0));
+        Assert.ThrowsExactly<InvalidOperationException>(() => abls.TryEnterAlphaLock(0));
+        Assert.ThrowsExactly<LockRecursionException>(() => abls.TryEnterBetaLock(0));
         abls.ExitBetaLock();
     }
 
@@ -341,13 +341,15 @@ public class AlphaBetaLockSlimTests
     {
         using AlphaBetaLockSlim abls = new();
         abls.EnterAlphaLock();
-        Assert.ThrowsException<LockRecursionException>(abls.EnterAlphaLock);
-        Assert.ThrowsException<InvalidOperationException>(abls.EnterBetaLock);
+        Assert.ThrowsExactly<LockRecursionException>(abls.EnterAlphaLock);
+        Assert.ThrowsExactly<InvalidOperationException>(abls.EnterBetaLock);
         abls.ExitAlphaLock();
 
         abls.EnterBetaLock();
-        Assert.ThrowsException<InvalidOperationException>(abls.EnterAlphaLock);
-        Assert.ThrowsException<LockRecursionException>(abls.EnterBetaLock);
+        Assert.ThrowsExactly<InvalidOperationException>(abls.EnterAlphaLock);
+        Assert.ThrowsExactly<LockRecursionException>(abls.EnterBetaLock);
         abls.ExitBetaLock();
     }
+
+    public TestContext TestContext { get; set; }
 }

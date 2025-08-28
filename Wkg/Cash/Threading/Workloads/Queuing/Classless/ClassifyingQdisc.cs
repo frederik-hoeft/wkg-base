@@ -6,6 +6,7 @@ using System.Runtime.ExceptionServices;
 using System.Text;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Scheduling;
 
 namespace Cash.Threading.Workloads.Queuing.Classless;
 
@@ -21,7 +22,7 @@ namespace Cash.Threading.Workloads.Queuing.Classless;
 public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager filters) : IClassifyingQdisc<THandle> where THandle : unmanaged
 {
     private readonly THandle _handle = handle;
-    private INotifyWorkScheduled _parentScheduler = NotifyWorkScheduledSentinel.Uninitialized;
+    private IWorkloadScheduler<THandle> _parentScheduler = WorkloadSchedulerSentinel<THandle>.Uninitialized;
     private protected bool _disposedValue;
 
     public IFilterManager Filters { get; } = filters;
@@ -29,7 +30,7 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     /// <summary>
     /// The parent scheduler of this qdisc.
     /// </summary>
-    private protected INotifyWorkScheduled ParentScheduler => Volatile.Read(ref _parentScheduler);
+    private protected IWorkloadScheduler<THandle> Scheduler => Volatile.Read(ref _parentScheduler);
 
     /// <inheritdoc/>
     public ref readonly THandle Handle => ref _handle;
@@ -40,7 +41,7 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     /// <inheritdoc/>
     public abstract int BestEffortCount { get; }
 
-    bool IClassifyingQdisc.IsCompleted => ReferenceEquals(ParentScheduler, NotifyWorkScheduledSentinel.Completed);
+    bool IClassifyingQdisc.IsCompleted => ReferenceEquals(Scheduler, WorkloadSchedulerSentinel<THandle>.Completed);
 
     void IClassifyingQdisc.AssertNotCompleted()
     {
@@ -60,28 +61,28 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     }
 
     /// <summary>
-    /// Called after this qdisc has been bound to a parent scheduler.
+    /// Called after this qdisc has been bound to a scheduler.
     /// </summary>
     /// <param name="parentScheduler">The parent scheduler.</param>
-    protected virtual void OnInternalInitialize(INotifyWorkScheduled parentScheduler) => Pass();
+    protected virtual void OnInternalInitialize(IWorkloadScheduler<THandle> scheduler) => Pass();
 
-    void IQdisc.InternalInitialize(INotifyWorkScheduled parentScheduler)
+    void IQdisc<THandle>.InternalInitialize(IWorkloadScheduler<THandle> scheduler)
     {
-        DebugLog.WriteDiagnostic($"Initializing qdisc {GetType().Name} ({Handle}) with parent scheduler {parentScheduler.GetType().Name} ({parentScheduler.As<IQdisc<THandle>>()?.Handle.ToString().Coalesce("<unknown>")}).");
-        if (!ReferenceEquals(Interlocked.CompareExchange(ref _parentScheduler, parentScheduler, NotifyWorkScheduledSentinel.Uninitialized), NotifyWorkScheduledSentinel.Uninitialized))
+        DebugLog.WriteDiagnostic($"Initializing qdisc {GetType().Name} ({Handle}) with parent scheduler {scheduler.GetType().Name} ({scheduler.As<IQdisc<THandle>>()?.Handle.ToString().Coalesce("<unknown>")}).");
+        if (!ReferenceEquals(Interlocked.CompareExchange(ref _parentScheduler, scheduler, WorkloadSchedulerSentinel<THandle>.Uninitialized), WorkloadSchedulerSentinel<THandle>.Uninitialized))
         {
             WorkloadSchedulingException exception = WorkloadSchedulingException.CreateVirtual(SR.ThreadingWorkloads_QdiscInitializationFailed_AlreadyBound);
             DebugLog.WriteException(exception);
             throw exception;
         }
-        OnInternalInitialize(parentScheduler);
+        OnInternalInitialize(scheduler);
     }
 
     /// <inheritdoc cref="IQdisc.TryDequeueInternal(int, bool, out AbstractWorkloadBase?)"/>"
-    protected abstract bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
+    protected abstract bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
 
     /// <inheritdoc cref="IQdisc.TryPeekUnsafe(int, out AbstractWorkloadBase?)"/>"
-    protected abstract bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
+    protected abstract bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
 
     /// <inheritdoc cref="IQdisc.TryRemoveInternal(AwaitableWorkload)"/>"
     protected abstract bool TryRemoveInternal(AwaitableWorkload workload);
@@ -99,29 +100,20 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     /// <returns><see langword="true"/> if the workload was successfully bound to the qdisc; <see langword="false"/> if the workload has already completed, is in an unbindable state, or another binding operation was faster.</returns>
     protected bool TryBindWorkload(AbstractWorkloadBase workload) => workload.TryInternalBindQdisc(this);
 
-    /// <summary>
-    /// Notifies the parent scheduler that there is a new workload available for processing.
-    /// </summary>
-    /// <remarks>
-    /// <see langword="WARNING"/>: be sure to call base.NotifyWorkScheduled() in derived classes. Otherwise, the parent scheduler will not be notified of the scheduled workload.<br/>
-    /// <see langword="WARNING"/>: only call this method in qdiscs that do not delegate the enqueue operation to another qdisc. Otherwise, the parent scheduler will be notified multiple times for the same workload.<br/>
-    /// <see langword="WARNING"/>: ensure that this method is only called when the workload has successfully enqueued and was bound to this qdisc. Otherwise, the parent scheduler will be notified of a workload that is not actually available for processing.
-    /// </remarks>
-    protected void NotifyWorkScheduled() => ParentScheduler.OnWorkScheduled();
+    /// <inheritdoc cref="IQdisc.OnWorkerTerminated(WorkerContext)"/>
+    protected virtual void OnWorkerTerminated(WorkerContext worker) => Pass();
 
-    /// <inheritdoc cref="IQdisc.OnWorkerTerminated(int)"/>
-    protected virtual void OnWorkerTerminated(int workerId) => Pass();
-
-    bool IQdisc.TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => TryDequeueInternal(workerId, backTrack, out workload);
+    bool IQdisc.TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => 
+        TryDequeueInternal(worker, backTrack, out workload);
 
     bool IQdisc.TryRemoveInternal(AwaitableWorkload workload) => TryRemoveInternal(workload);
 
     void IQdisc.Complete()
     {
         DebugLog.WriteDiagnostic($"Marking qdisc {GetType().Name} ({Handle}) as completed. Future scheduling attempts will be rejected.");
-        if (ReferenceEquals(Interlocked.Exchange(ref _parentScheduler, NotifyWorkScheduledSentinel.Completed), NotifyWorkScheduledSentinel.Uninitialized))
+        if (ReferenceEquals(Interlocked.Exchange(ref _parentScheduler, WorkloadSchedulerSentinel<THandle>.Completed), WorkloadSchedulerSentinel<THandle>.Completed))
         {
-            WorkloadSchedulingException exception = WorkloadSchedulingException.CreateVirtual("This qdisc was already completed. This is a bug in the qdisc implementation.");
+            WorkloadSchedulingException exception = WorkloadSchedulingException.CreateVirtual(SR.ThreadingWorkloads_QdiscCompletionFailed_AlreadyCompleted);
             DebugLog.WriteException(exception);
             throw exception;
         }
@@ -129,19 +121,19 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
 
     void IClassifyingQdisc.Enqueue(AbstractWorkloadBase workload) => EnqueueDirect(workload);
 
-    INotifyWorkScheduled IClassifyingQdisc.ParentScheduler => ParentScheduler;
+    IWorkloadScheduler<THandle> IQdisc<THandle>.Scheduler => Scheduler;
 
-    void IQdisc.OnWorkerTerminated(int workerId) => OnWorkerTerminated(workerId);
+    void IQdisc.OnWorkerTerminated(WorkerContext worker) => OnWorkerTerminated(worker);
 
-    bool IQdisc.TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => TryPeekUnsafe(workerId, out workload);
+    bool IQdisc.TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload) => TryPeekUnsafe(worker, out workload);
 
     #region IClassifyingQdisc / IClassifyingQdisc<THandle> implementation
 
     /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryEnqueueByHandle(THandle, AbstractWorkloadBase)"/>
     protected abstract bool TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload);
 
-    /// <inheritdoc cref="IClassifyingQdisc{THandle}.WillEnqueueFromRoutingPath(ref readonly RoutingPathNode{THandle}, AbstractWorkloadBase)"/>
-    protected virtual void WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => Pass();
+    /// <inheritdoc cref="IClassifyingQdisc{THandle}.OnEnqueueFromRoutingPath(ref readonly RoutingPathNode{THandle}, AbstractWorkloadBase)"/>
+    protected virtual void OnEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => Pass();
 
     /// <inheritdoc cref="IClassifyingQdisc{THandle}.TryFindRoute(THandle, ref RoutingPath{THandle})"/>
     protected abstract bool TryFindRoute(THandle handle, ref RoutingPath<THandle> path);
@@ -159,7 +151,7 @@ public abstract class ClassifyingQdisc<THandle>(THandle handle, IFilterManager f
     public abstract bool TryFindChild(THandle handle, [NotNullWhen(true)] out IClassifyingQdisc<THandle>? child);
 
     bool IClassifyingQdisc<THandle>.TryEnqueueByHandle(THandle handle, AbstractWorkloadBase workload) => TryEnqueueByHandle(handle, workload);
-    void IClassifyingQdisc<THandle>.WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => WillEnqueueFromRoutingPath(in routingPathNode, workload);
+    void IClassifyingQdisc<THandle>.OnEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload) => OnEnqueueFromRoutingPath(in routingPathNode, workload);
     bool IClassifyingQdisc<THandle>.TryFindRoute(THandle handle, ref RoutingPath<THandle> path) => TryFindRoute(handle, ref path);
     bool IClassifyingQdisc.CanClassify(object? state) => CanClassify(state);
     bool IClassifyingQdisc.TryEnqueue(object? state, AbstractWorkloadBase workload) => TryEnqueue(state, workload);

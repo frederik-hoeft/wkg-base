@@ -1,17 +1,17 @@
-﻿using Cash.Threading.Workloads.DependencyInjection.Implementations;
-using Cash.Threading.Workloads.Factories;
-using Cash.Threading.Workloads.Configuration.Classful.Custom;
-using Cash.Threading.Workloads.DependencyInjection.Configuration;
-using Cash.Threading.Workloads.Configuration.Classless;
-using Cash.Threading.Workloads.Scheduling;
+﻿using Cash.Common.Extensions;
 using Cash.Threading.Workloads.Configuration.Classful;
-using Cash.Threading.Workloads.Queuing.Classful;
-using Cash.Threading.Workloads.Queuing.Classless;
-using Cash.Threading.Workloads.DependencyInjection;
-using Cash.Threading.Workloads.WorkloadTypes;
-using Cash.Common.Extensions;
-using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Configuration.Classful.Custom;
 using Cash.Threading.Workloads.Configuration.Classification;
+using Cash.Threading.Workloads.Configuration.Classless;
+using Cash.Threading.Workloads.Configuration.Dispatcher;
+using Cash.Threading.Workloads.Factories;
+using Cash.Threading.Workloads.Queuing.Classful;
+using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Queuing.Classless;
+using Cash.Threading.Workloads.Scheduling;
+using Cash.Threading.Workloads.Scheduling.Dispatchers;
+using Cash.Threading.Workloads.WorkloadTypes;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Cash.Threading.Workloads.Configuration;
 
@@ -31,9 +31,19 @@ public abstract class WorkloadFactoryBuilderBase<THandle, TSelf>
         _context ??= context ?? new QdiscBuilderContext();
     }
 
-    public TSelf UseMaximumConcurrency(int maximumConcurrency)
+    public TSelf UseWorkloadDispatcher(IWorkloadDispatcherFactory dispatcherFactory)
     {
-        _context.MaximumConcurrency = maximumConcurrency;
+        ArgumentNullException.ThrowIfNull(dispatcherFactory);
+        _context.WorkloadDispatcherFactory = dispatcherFactory;
+        return this.To<TSelf>();
+    }
+
+    public TSelf UseWorkloadDispatcher<TDispatcherFactory>(Action<TDispatcherFactory>? configureDispatcher = null)
+        where TDispatcherFactory : class, IWorkloadDispatcherFactory, new()
+    {
+        TDispatcherFactory factory = new();
+        configureDispatcher?.Invoke(factory);
+        _context.WorkloadDispatcherFactory = factory;
         return this.To<TSelf>();
     }
 
@@ -61,64 +71,76 @@ public abstract class WorkloadFactoryBuilderBase<THandle, TSelf>
         return this.To<TSelf>();
     }
 
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_CALLER)]
     private protected TWorkloadFactory UseClasslessRootCore<TWorkloadFactory, TRoot>(THandle rootHandle, Action<TRoot> rootConfiguration, Action<IFilterManager>? configureFilters = null)
         where TRoot : ClasslessQdiscBuilder<TRoot>, IClasslessQdiscBuilder<TRoot>
         where TWorkloadFactory : AbstractClasslessWorkloadFactory<THandle>, IWorkloadFactory<THandle, TWorkloadFactory>
     {
+        ArgumentNullException.ThrowIfNull(rootConfiguration);
         TRoot rootBuilder = TRoot.CreateBuilder(_context);
         rootConfiguration(rootBuilder);
         IFilterManager filters = _filterManagerFactory.CreateFilterManager(configureFilters);
-        IClassifyingQdisc<THandle> qdisc = rootBuilder.Build(rootHandle, filters);
-        WorkloadDispatcher scheduler = _context.ServiceProviderFactory is null
-            ? new WorkloadDispatcher(qdisc, _context.MaximumConcurrency)
-            : new WorkloadDispatcherWithDI(qdisc, _context.MaximumConcurrency, _context.ServiceProviderFactory);
-        qdisc.InternalInitialize(scheduler);
+        IClassifyingQdisc<THandle> root = rootBuilder.Build(rootHandle, filters);
+        IWorkloadDispatcherFactory dispatcherFactory = GetDispatcherFactoryOrThrow();
+        IWorkloadDispatcher dispatcher = dispatcherFactory.CreateDispatcher(root);
+        IWorkloadScheduler<THandle> scheduler = new WorkloadScheduler<THandle>(root, dispatcher);
+        root.InternalInitialize(scheduler);
         AnonymousWorkloadPoolManager? pool = null;
         if (_context.UsePooling)
         {
             pool = new AnonymousWorkloadPoolManager(_context.PoolSize);
         }
-        return TWorkloadFactory.Create(qdisc, pool, _context.ContextOptions);
+        return TWorkloadFactory.Create(scheduler, pool, _context.ContextOptions);
     }
 
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_CALLER)]
     private protected TWorkloadFactory UseClassfulRootCore<TWorkloadFactory, TRoot>(THandle rootHandle, Action<ClassfulBuilder<THandle, TRoot>> rootClassConfiguration)
         where TRoot : ClassfulQdiscBuilder<TRoot>, IClassfulQdiscBuilder<TRoot>
         where TWorkloadFactory : AbstractClasslessWorkloadFactory<THandle>, IWorkloadFactory<THandle, TWorkloadFactory>
     {
+        ArgumentNullException.ThrowIfNull(rootClassConfiguration);
         ClassfulBuilder<THandle, TRoot> rootClassBuilder = new(rootHandle, _context);
         rootClassConfiguration(rootClassBuilder);
-        IClassfulQdisc<THandle> rootQdisc = rootClassBuilder.Build();
-
-        WorkloadDispatcher scheduler = _context.ServiceProviderFactory is null
-            ? new WorkloadDispatcher(rootQdisc, _context.MaximumConcurrency)
-            : new WorkloadDispatcherWithDI(rootQdisc, _context.MaximumConcurrency, _context.ServiceProviderFactory);
-        rootQdisc.InternalInitialize(scheduler);
+        IClassfulQdisc<THandle> root = rootClassBuilder.Build();
+        IWorkloadDispatcherFactory dispatcherFactory = GetDispatcherFactoryOrThrow();
+        IWorkloadDispatcher dispatcher = dispatcherFactory.CreateDispatcher(root);
+        IWorkloadScheduler<THandle> scheduler = new WorkloadScheduler<THandle>(root, dispatcher);
+        root.InternalInitialize(scheduler);
         AnonymousWorkloadPoolManager? pool = null;
         if (_context.UsePooling)
         {
             pool = new AnonymousWorkloadPoolManager(_context.PoolSize);
         }
-        return TWorkloadFactory.Create(rootQdisc, pool, _context.ContextOptions);
+        return TWorkloadFactory.Create(scheduler, pool, _context.ContextOptions);
     }
 
+    [SuppressMessage(RELIABILITY, CA2000_DISPOSE_OBJECT, Justification = JUSTIFY_CA2000_OWNERSHIP_TRANSFER_TO_CALLER)]
     private protected TWorkloadFactory UseClassfulRootCore<TWorkloadFactory, TRoot>(THandle rootHandle, Action<TRoot> rootConfiguration)
         where TRoot : CustomClassfulQdiscBuilder<THandle, TRoot>, ICustomClassfulQdiscBuilder<THandle, TRoot>
         where TWorkloadFactory : AbstractClasslessWorkloadFactory<THandle>, IWorkloadFactory<THandle, TWorkloadFactory>
     {
+        ArgumentNullException.ThrowIfNull(rootConfiguration);
         TRoot rootClassBuilder = TRoot.CreateBuilder(rootHandle, _context);
         rootConfiguration(rootClassBuilder);
-        IClassfulQdisc<THandle> rootQdisc = rootClassBuilder.Build();
-
-        WorkloadDispatcher scheduler = _context.ServiceProviderFactory is null
-            ? new WorkloadDispatcher(rootQdisc, _context.MaximumConcurrency)
-            : new WorkloadDispatcherWithDI(rootQdisc, _context.MaximumConcurrency, _context.ServiceProviderFactory);
-        rootQdisc.InternalInitialize(scheduler);
+        IClassfulQdisc<THandle> root = rootClassBuilder.Build();
+        IWorkloadDispatcherFactory dispatcherFactory = GetDispatcherFactoryOrThrow();
+        IWorkloadDispatcher dispatcher = dispatcherFactory.CreateDispatcher(root);
+        IWorkloadScheduler<THandle> scheduler = new WorkloadScheduler<THandle>(root, dispatcher);
         AnonymousWorkloadPoolManager? pool = null;
         if (_context.UsePooling)
         {
             pool = new AnonymousWorkloadPoolManager(_context.PoolSize);
         }
-        return TWorkloadFactory.Create(rootQdisc, pool, _context.ContextOptions);
+        return TWorkloadFactory.Create(scheduler, pool, _context.ContextOptions);
+    }
+
+    private protected IWorkloadDispatcherFactory GetDispatcherFactoryOrThrow()
+    {
+        if (_context.WorkloadDispatcherFactory is { } factory)
+        {
+            return factory;
+        }
+        throw new InvalidOperationException("A workload dispatcher factory must be configured before building the workload factory. Use the UseWorkloadDispatcher method to configure a dispatcher factory.");
     }
 }
 
@@ -128,19 +150,6 @@ public class WorkloadFactoryBuilder<THandle> : WorkloadFactoryBuilderBase<THandl
     internal WorkloadFactoryBuilder(QdiscBuilderContext context) : base(context) => Pass();
 
     internal WorkloadFactoryBuilder() => Pass();
-
-    public WorkloadFactoryBuilderWithDI<THandle> UseDependencyInjection(Action<WorkloadServiceProviderBuilder> configurationAction) =>
-        UseDependencyInjection<SimpleWorkloadServiceProviderFactory>(configurationAction);
-
-    public WorkloadFactoryBuilderWithDI<THandle> UseDependencyInjection<TServiceProviderFactory>(Action<WorkloadServiceProviderBuilder> configurationAction)
-        where TServiceProviderFactory : class, IWorkloadServiceProviderFactory, new()
-    {
-        IWorkloadServiceProviderFactory factoryProvider = new TServiceProviderFactory();
-        WorkloadServiceProviderBuilder builder = new(factoryProvider);
-        configurationAction.Invoke(builder);
-        _context.ServiceProviderFactory = builder.Build();
-        return new WorkloadFactoryBuilderWithDI<THandle>(_context);
-    }
 
     public ClasslessWorkloadFactory<THandle> UseClasslessRoot<TRoot>(THandle rootHandle)
         where TRoot : ClasslessQdiscBuilder<TRoot>, IClasslessQdiscBuilder<TRoot> =>
@@ -161,30 +170,4 @@ public class WorkloadFactoryBuilder<THandle> : WorkloadFactoryBuilderBase<THandl
     public ClassfulWorkloadFactory<THandle> UseClassfulRoot<TRoot>(THandle rootHandle, Action<TRoot> rootConfiguration)
         where TRoot : CustomClassfulQdiscBuilder<THandle, TRoot>, ICustomClassfulQdiscBuilder<THandle, TRoot> =>
             UseClassfulRootCore<ClassfulWorkloadFactory<THandle>, TRoot >(rootHandle, rootConfiguration);
-}
-
-public class WorkloadFactoryBuilderWithDI<THandle> : WorkloadFactoryBuilderBase<THandle, WorkloadFactoryBuilderWithDI<THandle>>
-    where THandle : unmanaged
-{
-    internal WorkloadFactoryBuilderWithDI(QdiscBuilderContext context) : base(context) => Pass();
-
-    public ClasslessWorkloadFactoryWithDI<THandle> UseClasslessRoot<TRoot>(THandle rootHandle)
-        where TRoot : ClasslessQdiscBuilder<TRoot>, IClasslessQdiscBuilder<TRoot> =>
-            UseClasslessRootCore<ClasslessWorkloadFactoryWithDI<THandle>, TRoot>(rootHandle, Pass);
-
-    public ClasslessWorkloadFactoryWithDI<THandle> UseClasslessRoot<TRoot>(THandle rootHandle, Action<TRoot> rootConfiguration)
-        where TRoot : ClasslessQdiscBuilder<TRoot>, IClasslessQdiscBuilder<TRoot> =>
-            UseClasslessRootCore<ClasslessWorkloadFactoryWithDI<THandle>, TRoot>(rootHandle, rootConfiguration);
-
-    public ClassfulWorkloadFactoryWithDI<THandle> UseClassfulRoot<TRoot>(THandle rootHandle)
-        where TRoot : ClassfulQdiscBuilder<TRoot>, IClassfulQdiscBuilder<TRoot> =>
-            UseClassfulRootCore<ClassfulWorkloadFactoryWithDI<THandle>, TRoot>(rootHandle, Pass);
-
-    public ClassfulWorkloadFactoryWithDI<THandle> UseClassfulRoot<TRoot>(THandle rootHandle, Action<ClassfulBuilder<THandle, TRoot>> rootClassConfiguration)
-        where TRoot : ClassfulQdiscBuilder<TRoot>, IClassfulQdiscBuilder<TRoot> =>
-            UseClassfulRootCore<ClassfulWorkloadFactoryWithDI<THandle>, TRoot>(rootHandle, rootClassConfiguration);
-
-    public ClassfulWorkloadFactoryWithDI<THandle> UseClassfulRoot<TRoot>(THandle rootHandle, Action<TRoot> rootConfiguration)
-        where TRoot : CustomClassfulQdiscBuilder<THandle, TRoot>, ICustomClassfulQdiscBuilder<THandle, TRoot> =>
-            UseClassfulRootCore<ClassfulWorkloadFactoryWithDI<THandle>, TRoot>(rootHandle, rootConfiguration);
 }

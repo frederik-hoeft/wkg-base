@@ -117,6 +117,9 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="ThreadingWorkloads_QdiscCompletionFailed_AlreadyCompleted" xml:space="preserve">
+    <value>This qdisc was already completed. This is a bug in the qdisc implementation.</value>
+  </data>
   <data name="ThreadingWorkloads_QdiscEnqueueFailed_AlreadyCompleted" xml:space="preserve">
     <value>A workload was scheduled, but it was already completed. Ignoring scheduling attempt.</value>
   </data>
@@ -128,5 +131,11 @@
   </data>
   <data name="ThreadingWorkloads_QdiscInitializationFailed_AlreadyBound" xml:space="preserve">
     <value>A workload scheduler was already set for this qdisc. This is a bug in the qdisc implementation.</value>
+  </data>
+  <data name="ThreadingWorkloads_SchedulingFailed_SentinelInstance" xml:space="preserve">
+    <value>Attempted to schedule a workload on a sentinel scheduler instance. This is not allowed.</value>
+  </data>
+  <data name="ThreadingWorkloads_Workload_NotBound" xml:space="preserve">
+    <value>Internal error: Qdisc completion sentinel should never be accessed. This is a bug. Please report this issue.</value>
   </data>
 </root>

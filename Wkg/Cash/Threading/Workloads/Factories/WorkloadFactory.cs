@@ -1,23 +1,23 @@
-﻿using Cash.Diagnostic;
-using Cash.Threading.Workloads.Queuing.Classless;
+﻿using Cash.Threading.Workloads.Queuing.Classless;
+using Cash.Threading.Workloads.Scheduling;
 using Cash.Threading.Workloads.WorkloadTypes;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.ExceptionServices;
 
 namespace Cash.Threading.Workloads.Factories;
 
 public abstract class WorkloadFactory<THandle> : IDisposable where THandle : unmanaged
 {
-    private IClassifyingQdisc<THandle> _root;
     private bool _disposedValue;
+
+    protected IWorkloadScheduler<THandle> Scheduler { get; }
 
     private protected AnonymousWorkloadPoolManager? Pool { get; }
 
     public WorkloadContextOptions DefaultOptions { get; }
 
-    private protected WorkloadFactory(IClassifyingQdisc<THandle> root, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options)
+    private protected WorkloadFactory(IWorkloadScheduler<THandle> root, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options)
     {
-        _root = root;
+        Scheduler = root;
         Pool = pool;
         DefaultOptions = options ?? new WorkloadContextOptions();
     }
@@ -25,46 +25,17 @@ public abstract class WorkloadFactory<THandle> : IDisposable where THandle : unm
     [MemberNotNullWhen(true, nameof(Pool))]
     private protected bool SupportsPooling => Pool is not null;
 
-    private protected ref IClassifyingQdisc<THandle> RootRef
-    {
-        get
-        {
-            _root.AssertNotCompleted();
-            return ref _root;
-        }
-    }
+    private protected IClassifyingQdisc<THandle> Root => Scheduler.Root;
+
+    protected void CheckDisposed() => ObjectDisposedException.ThrowIf(_disposedValue, this);
 
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
         {
-            if (disposing && !_root.IsCompleted)
+            if (disposing)
             {
-                DebugLog.WriteInfo("Workload factory: disposal requested.");
-                // store the current root scheduler.
-                INotifyWorkScheduled scheduler = _root.ParentScheduler;
-                // CAS in the completion sentinel to prevent further scheduling.
-                _root.Complete();
-                // dispose the root scheduler and wait for all workers to exit.
-                scheduler.DisposeRoot();
-                // clear all workloads from the root scheduler.
-                ObjectDisposedException exception = new(nameof(WorkloadFactory<THandle>), "The parent workload factory was disposed.");
-                ExceptionDispatchInfo.SetCurrentStackTrace(exception);
-                while (_root.TryDequeueInternal(workerId: 0, backTrack: false, out AbstractWorkloadBase? workload))
-                {
-                    if (!workload.IsCompleted)
-                    {
-                        workload.InternalAbort(exception);
-                        DebugLog.WriteWarning($"Disposing workload factory but scheduler still contains uncompleted workloads. Forcefully aborted workload {workload}.");
-                    }
-                    if (workload is AwaitableWorkload awaitable)
-                    {
-                        awaitable.UnbindQdiscUnsafe();
-                    }
-                }
-                // dispose the qdisc data structures.
-                DebugLog.WriteDebug("Disposing scheduler data structures NOW.");
-                _root.Dispose();
+                Scheduler.Dispose();
             }
 
             _disposedValue = true;

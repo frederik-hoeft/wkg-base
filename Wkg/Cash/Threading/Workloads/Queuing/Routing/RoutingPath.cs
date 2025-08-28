@@ -5,7 +5,7 @@ using Cash.Threading.Workloads.Exceptions;
 
 namespace Cash.Threading.Workloads.Queuing.Routing;
 
-public ref struct RoutingPath<THandle> where THandle : unmanaged
+public ref struct RoutingPath<THandle> : IDisposable where THandle : unmanaged
 {
     private PooledArray<RoutingPathNode<THandle>> _path;
 

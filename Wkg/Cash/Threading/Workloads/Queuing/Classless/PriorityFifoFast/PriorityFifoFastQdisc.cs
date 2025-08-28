@@ -1,25 +1,20 @@
 ﻿using Cash.Collections.Concurrent;
 using Cash.Common.Extensions;
-using Cash.Threading.Workloads.Queuing.Classless.Fifo;
-using Cash.Threading.Workloads.Queuing.Routing;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using Cash.Common.ThrowHelpers;
 using Cash.Threading.Workloads.Queuing.Classification;
+using Cash.Threading.Workloads.Queuing.Classless.Fifo;
+using Cash.Threading.Workloads.Queuing.Routing;
+using Cash.Threading.Workloads.Scheduling;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 
-internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INotifyWorkScheduled
+internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>
     where THandle : unmanaged
 {
-    // it is impossible to have a hierachy of PriorityFifoFastQdiscs (classless)
-    // and the life-time of values in this field is limited to a single enqueue operation
-    // so static is fine here because this won't be set for multiple instances at the same time
-    // => (no ThreadLocal required)
-    [ThreadStatic]
-    private static int? s_th_lastEnqueuedChildIndex;
-
     private readonly ConcurrentBitmap _dataMap;
     private readonly IClassifyingQdisc<THandle>[] _bands;
     private readonly int _defaultBand;
@@ -42,14 +37,14 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         {
             THandle bandHandle = _bandHandlesConfigured ? bandHandles[i] : default;
             FifoQdisc<THandle> band = new(bandHandle, FilterManager.MatchNothing());
-            band.To<IQdisc>().InternalInitialize(this);
+            band.To<IQdisc<THandle>>().InternalInitialize(Scheduler);
             _bands[i] = band;
         }
         _defaultBand = defaultBand;
         _bandSelector = bandSelector;
     }
 
-    public override bool IsEmpty => _dataMap.IsEmpty;
+    public override bool IsEmpty => _dataMap.IsEmptyUnsafe;
 
     public override int BestEffortCount => _fuzzyCount;
 
@@ -81,11 +76,12 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         Interlocked.Increment(ref _fuzzyCount);
         // update the data map. This must be done before notifying the scheduler
         // it doesn't matter if it happens before or after the enqueue
-        s_th_lastEnqueuedChildIndex = band;
         _bands[band].Enqueue(workload);
+        // update the empty map to reflect that this band is no longer empty
+        PostWorkScheduled(band);
     }
 
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         // we loop until we find something to dequeue
         // a simple for loop isn't enough because new workloads may be inserted at a lower band after we've checked it
@@ -109,7 +105,7 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
                     {
                         token = _dataMap.GetTokenUnsafe(i);
                     }
-                    if (bands[i].TryDequeueInternal(workerId, backTrack, out workload))
+                    if (bands[i].TryDequeueInternal(worker, backTrack, out workload))
                     {
                         Interlocked.Decrement(ref _fuzzyCount);
                         return true;
@@ -177,7 +173,7 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         return false;
     }
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         // we loop until we find something to peek or the queue is empty
         // a simple for loop isn't enough because new workloads may be inserted at a lower band after we've checked it
@@ -185,7 +181,7 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         {
             for (int i = 0; i < _bands.Length; i++)
             {
-                if (!_dataMap.IsBitSet(i))
+                if (!_dataMap.IsBitSetUnsafe(i))
                 {
                     // just skip this band if it's empty
                     // a lookup in the data map is faster than an attempted peek
@@ -194,8 +190,8 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
                 byte token;
                 do
                 {
-                    token = _dataMap.GetToken(i);
-                    if (_bands[i].TryPeekUnsafe(workerId, out workload))
+                    token = _dataMap.GetTokenUnsafe(i);
+                    if (_bands[i].TryPeekUnsafe(worker, out workload))
                     {
                         return true;
                     }
@@ -203,7 +199,7 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
                     // so we need to update the data map to reflect the new state
                     // something may have been enqueued in the meantime, so we use a token to ensure that we don't overwrite
                     // a newer state with an older one
-                } while (!_dataMap.TryUpdateBit(i, token, false));
+                } while (!_dataMap.TryUpdateBitUnsafe(i, token, false));
             }
         }
         // the queue was empty, and we didn't find anything to peek
@@ -213,18 +209,14 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
 
     protected override bool TryRemoveInternal(AwaitableWorkload workload) => false;
 
-    protected override void WillEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload)
+    protected override void OnEnqueueFromRoutingPath(ref readonly RoutingPathNode<THandle> routingPathNode, AbstractWorkloadBase workload)
     {
         Interlocked.Increment(ref _fuzzyCount);
-        s_th_lastEnqueuedChildIndex = routingPathNode.Offset;
+        PostWorkScheduled(routingPathNode.Offset);
     }
 
-    void INotifyWorkScheduled.OnWorkScheduled()
-    {
-        Debug.Assert(s_th_lastEnqueuedChildIndex is not null);
-        _dataMap.UpdateBit(s_th_lastEnqueuedChildIndex.Value, value: true);
-        ParentScheduler.OnWorkScheduled();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void PostWorkScheduled(int index) => _dataMap.UpdateBitUnsafe(index, isSet: true);
 
     protected override void DisposeManaged()
     {
@@ -234,8 +226,6 @@ internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>, INoti
         }
         _dataMap.Dispose();
     }
-
-    void INotifyWorkScheduled.DisposeRoot() => ParentScheduler.DisposeRoot();
 
     protected override void ChildrenToTreeString(StringBuilder builder, int indent)
     {

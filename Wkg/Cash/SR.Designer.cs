@@ -61,6 +61,15 @@ namespace Cash {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to This qdisc was already completed. This is a bug in the qdisc implementation..
+        /// </summary>
+        internal static string ThreadingWorkloads_QdiscCompletionFailed_AlreadyCompleted {
+            get {
+                return ResourceManager.GetString("ThreadingWorkloads_QdiscCompletionFailed_AlreadyCompleted", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to A workload was scheduled, but it was already completed. Ignoring scheduling attempt..
         /// </summary>
         internal static string ThreadingWorkloads_QdiscEnqueueFailed_AlreadyCompleted {
@@ -93,6 +102,24 @@ namespace Cash {
         internal static string ThreadingWorkloads_QdiscInitializationFailed_AlreadyBound {
             get {
                 return ResourceManager.GetString("ThreadingWorkloads_QdiscInitializationFailed_AlreadyBound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Attempted to schedule a workload on a sentinel scheduler instance. This is not allowed..
+        /// </summary>
+        internal static string ThreadingWorkloads_SchedulingFailed_SentinelInstance {
+            get {
+                return ResourceManager.GetString("ThreadingWorkloads_SchedulingFailed_SentinelInstance", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Internal error: Qdisc completion sentinel should never be accessed. This is a bug. Please report this issue..
+        /// </summary>
+        internal static string ThreadingWorkloads_Workload_NotBound {
+            get {
+                return ResourceManager.GetString("ThreadingWorkloads_Workload_NotBound", resourceCulture);
             }
         }
     }

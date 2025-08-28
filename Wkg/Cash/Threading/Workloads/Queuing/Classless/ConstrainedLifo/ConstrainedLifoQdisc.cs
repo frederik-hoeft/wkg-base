@@ -1,6 +1,7 @@
 ﻿using Cash.Common;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedFifo;
+using Cash.Threading.Workloads.Scheduling;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -9,7 +10,7 @@ namespace Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 internal sealed class ConstrainedLifoQdisc<THandle>(THandle handle, IFilterManager filters, int maxCount, ConstrainedPrioritizationOptions options) 
     : ConstrainedFifoQdisc<THandle>(handle, filters, maxCount, options), IClassifyingQdisc<THandle> where THandle : unmanaged
 {
-    protected override bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         // prioritize enqueuing or dequeuing based on the specified constrained options
         // use the alpha lock if we are minimizing workload cancellation (execute as much as possible)
@@ -39,7 +40,7 @@ internal sealed class ConstrainedLifoQdisc<THandle>(THandle handle, IFilterManag
         return true;
     }
 
-    protected override bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
+    protected override bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload)
     {
         ulong currentState;
         do

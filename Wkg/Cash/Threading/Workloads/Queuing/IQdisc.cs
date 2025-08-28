@@ -1,4 +1,5 @@
 ﻿using Cash.Threading.Workloads.Configuration;
+using Cash.Threading.Workloads.Scheduling;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Cash.Threading.Workloads.Queuing;
@@ -12,12 +13,6 @@ public interface IQdisc : IDisposable
     /// Returns a string representation of the qdisc and all child qdiscs.
     /// </summary>
     string ToTreeString();
-
-    /// <summary>
-    /// Initializes the qdisc with the specified parent scheduler.
-    /// </summary>
-    /// <param name="parentScheduler">The parent scheduler.</param>
-    internal void InternalInitialize(INotifyWorkScheduled parentScheduler);
 
     /// <summary>
     /// Completes the qdisc, preventing any further workloads from being enqueued.
@@ -45,16 +40,16 @@ public interface IQdisc : IDisposable
     /// <summary>
     /// Attempts to dequeue a workload from this qdisc.
     /// </summary>
-    /// <param name="workerId">The unique ID of the worker thread attempting to dequeue a workload. This ID is guaranteed to be in the range [0, <see cref="IQdiscBuilderContext.MaximumConcurrency"/>).</param>
+    /// <param name="worker">The worker context of the worker thread attempting to dequeue a workload. The ID associated with the worker context is guaranteed to be unique for a single worker in the context of the parent workload scheduler.</param>
     /// <param name="backTrack">Whether to repeat the same dequeue operation performed in the previous call to this method, according to the internal state of the qdisc. Instructs the implementing qdisc to back-track to the previous state if possible.</param>
     /// <param name="workload">The dequeued workload, if any.</param>
     /// <returns><see langword="true"/> if a workload was dequeued; otherwise, <see langword="false"/>.</returns>
     /// <remarks>
     /// The <paramref name="backTrack"/> parameter is set to <see langword="true"/> when execution of the previously dequeued workload was skipped due to cancellation, or any other valid reason to repeat the previous dequeue operation. For example, if a stale workload was dequeued and skipped in a round-robin qdisc, the next dequeue operation should repeat the same dequeue operation and assume the previous dequeue operation never happened. This is to ensure fairness in cases where workloads *should* have been removed from the qdisc previously due to cancellation, but could not be removed due to the qdisc not supporting removal of workloads. In such cases, the qdisc should repeat the dequeue operation until it finds a valid workload to execute.
     /// </remarks>
-    internal bool TryDequeueInternal(int workerId, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
+    internal bool TryDequeueInternal(WorkerContext worker, bool backTrack, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
 
-    internal bool TryPeekUnsafe(int workerId, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
+    internal bool TryPeekUnsafe(WorkerContext worker, [NotNullWhen(true)] out AbstractWorkloadBase? workload);
 
     /// <summary>
     /// Notifies the qdisc that a worker thread has been terminated.
@@ -65,7 +60,7 @@ public interface IQdisc : IDisposable
     /// The qdisc should use this method to remove any references to the worker thread from its internal state.
     /// Classful qdiscs should forward this method to all child qdiscs.
     /// </remarks>
-    void OnWorkerTerminated(int workerId);
+    void OnWorkerTerminated(WorkerContext worker);
 
     /// <summary>
     /// Attempts to remove the specified workload from this qdisc.
@@ -87,4 +82,12 @@ public interface IQdisc<THandle> : IQdisc where THandle : unmanaged
     /// A handle uniquely identifying this qdisc.
     /// </summary>
     ref readonly THandle Handle { get; }
+
+    internal IWorkloadScheduler<THandle> Scheduler { get; }
+
+    /// <summary>
+    /// Initializes the qdisc with the specified scheduler.
+    /// </summary>
+    /// <param name="scheduler">The workload scheduler responsible for scheduling workloads from this qdisc.</param>
+    internal void InternalInitialize(IWorkloadScheduler<THandle> scheduler);
 }

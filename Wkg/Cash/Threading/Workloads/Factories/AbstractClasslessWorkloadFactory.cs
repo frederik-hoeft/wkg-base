@@ -1,15 +1,15 @@
 ﻿using Cash.Diagnostic;
-using Cash.Threading.Workloads.Queuing.Classless;
-using Cash.Threading.Workloads.WorkloadTypes;
-using Cash.Threading.Workloads;
 using Cash.Threading.Workloads.Exceptions;
+using Cash.Threading.Workloads.Queuing.Classless;
+using Cash.Threading.Workloads.Scheduling;
+using Cash.Threading.Workloads.WorkloadTypes;
 
 namespace Cash.Threading.Workloads.Factories;
 
 public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactory<THandle> where THandle : unmanaged
 {
-    private protected AbstractClasslessWorkloadFactory(IClassifyingQdisc<THandle> root, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options) 
-        : base(root, pool, options)
+    private protected AbstractClasslessWorkloadFactory(IWorkloadScheduler<THandle> scheduler, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options) 
+        : base(scheduler, pool, options)
     {
     }
 
@@ -19,14 +19,14 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         AnonymousWorkload workload = SupportsPooling
             ? Pool.Rent(action)
             : new AnonymousWorkloadImpl(action);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
     }
 
     public virtual void Schedule<TState>(TState state, Action<TState> action)
     {
         DebugLog.WriteDiagnostic("Scheduling new anonymous workload.");
         AnonymousWorkload workload = new AnonymousWorkloadImplWithState<TState>(state, action);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
     }
 
     public virtual Workload ScheduleAsync(Action<CancellationFlag> action, WorkloadContextOptions? options = null) =>
@@ -40,7 +40,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload workload = new WorkloadImpl(action, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -55,7 +55,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload workload = new TaskWorkloadImpl(task, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -70,7 +70,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload workload = new WorkloadImplWithState<TState>(state, action, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -85,7 +85,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload workload = new TaskWorkloadImplWithState<TState>(state, task, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -100,7 +100,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload<TResult> workload = new WorkloadImpl<TResult>(func, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -115,7 +115,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload<TResult> workload = new TaskWorkloadImpl<TResult>(task, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -130,7 +130,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload<TResult> workload = new WorkloadImplWithState<TState, TResult>(state, func, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
 
@@ -145,11 +145,9 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload<TResult> workload = new TaskWorkloadImplWithState<TState, TResult>(state, task, options, cancellationToken);
-        ScheduleCore(workload);
+        Scheduler.Schedule(workload);
         return workload;
     }
-
-    private protected virtual void ScheduleCore(AbstractWorkloadBase workload) => RootRef.Enqueue(workload);
 
     public virtual void Classify<TState>(TState state, Action action)
     {
@@ -157,14 +155,14 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         AnonymousWorkload workload = SupportsPooling
             ? Pool.Rent(action)
             : new AnonymousWorkloadImpl(action);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
     }
 
     public virtual void Classify<TState>(TState state, Action<TState> action)
     {
         DebugLog.WriteDiagnostic("Scheduling new anonymous workload.");
         AnonymousWorkload workload = new AnonymousWorkloadImplWithState<TState>(state, action);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
     }
 
     public virtual Workload ClassifyAsync<TState>(TState state, Action<CancellationFlag> action, WorkloadContextOptions? options = null) =>
@@ -178,7 +176,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload workload = new WorkloadImpl(action, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -193,7 +191,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload workload = new TaskWorkloadImpl(task, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -208,7 +206,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload workload = new WorkloadImplWithState<TState>(state, action, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -223,7 +221,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload workload = new TaskWorkloadImplWithState<TState>(state, task, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -238,7 +236,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload<TResult> workload = new WorkloadImpl<TResult>(func, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -253,7 +251,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload<TResult> workload = new TaskWorkloadImpl<TResult>(task, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -268,7 +266,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload<TResult> workload = new WorkloadImplWithState<TState, TResult>(state, func, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -283,7 +281,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload<TResult> workload = new TaskWorkloadImplWithState<TState, TResult>(state, task, options, cancellationToken);
-        ClassifyCore(state, workload);
+        Scheduler.Classify(state, workload);
         return workload;
     }
 
@@ -293,14 +291,14 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         AnonymousWorkload workload = SupportsPooling
             ? Pool.Rent(action)
             : new AnonymousWorkloadImpl(action);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
     }
 
     public virtual void Schedule<TState>(THandle handle, TState state, Action<TState> action)
     {
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         AnonymousWorkload workload = new AnonymousWorkloadImplWithState<TState>(state, action);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
     }
 
     public virtual Workload ScheduleAsync(THandle handle, Action<CancellationFlag> action, WorkloadContextOptions? options = null) =>
@@ -314,7 +312,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload workload = new WorkloadImpl(action, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -329,7 +327,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload workload = new TaskWorkloadImpl(task, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -344,7 +342,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload workload = new WorkloadImplWithState<TState>(state, action, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -359,7 +357,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload workload = new TaskWorkloadImplWithState<TState>(state, task, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -374,7 +372,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload<TResult> workload = new WorkloadImpl<TResult>(func, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -389,7 +387,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload<TResult> workload = new TaskWorkloadImpl<TResult>(task, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -404,7 +402,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         Workload<TResult> workload = new WorkloadImplWithState<TState, TResult>(state, func, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
     }
 
@@ -419,28 +417,7 @@ public abstract class AbstractClasslessWorkloadFactory<THandle> : WorkloadFactor
         DebugLog.WriteDiagnostic("Scheduling new workload.");
         options ??= DefaultOptions;
         TaskWorkload<TResult> workload = new TaskWorkloadImplWithState<TState, TResult>(state, task, options, cancellationToken);
-        ScheduleCore(handle, workload);
+        Scheduler.Schedule(handle, workload);
         return workload;
-    }
-
-    private protected virtual void ClassifyCore<TState>(TState state, AbstractWorkloadBase workload)
-    {
-        if (!RootRef.TryEnqueue(state, workload))
-        {
-            WorkloadSchedulingException.ThrowClassificationFailed(state);
-        }
-    }
-
-    private protected virtual void ScheduleCore(THandle handle, AbstractWorkloadBase workload)
-    {
-        IClassifyingQdisc<THandle> root = RootRef;
-        if (root.Handle.Equals(handle))
-        {
-            root.Enqueue(workload);
-        }
-        else if (!root.TryEnqueueByHandle(handle, workload))
-        {
-            WorkloadSchedulingException.ThrowNoRouteFound(handle);
-        }
     }
 }

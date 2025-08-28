@@ -5,8 +5,8 @@ using Cash.Threading.Workloads.Configuration.Classless;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Queuing.Classless;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
+using Cash.Threading.Workloads.Scheduling;
 using Cash.Threading.Workloads.WorkloadTypes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using CL = Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo.ConstrainedLifo;
 
 namespace Cash.Tests.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
@@ -22,26 +22,26 @@ public class ConstrainedLifoQdiscTests
             .WithCapacity(capacity)
             .To<IClasslessQdiscBuilder>()
             .BuildUnsafe<int>();
-        qdisc.InternalInitialize(default(DummyScheduler));
+        qdisc.InternalInitialize(new DummyScheduler(qdisc));
         return qdisc;
     }
 
     [TestMethod]
     public void TestBuilder()
     {
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
             CL.CreateBuilder(s_context).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             CL.CreateBuilder(s_context).WithCapacity(0).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             CL.CreateBuilder(s_context).WithCapacity(1).WithCapacity(0).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
-        Assert.ThrowsException<InvalidOperationException>(() =>
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
             CL.CreateBuilder(s_context).WithCapacity(1).WithCapacity(3).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             CL.CreateBuilder(s_context).WithCapacity(-1).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing()));
 
         IClassifyingQdisc<int> qdisc = CL.CreateBuilder(s_context).WithCapacity(8).To<IClasslessQdiscBuilder>().Build(1, FilterManager.MatchNothing());
@@ -73,22 +73,24 @@ public class ConstrainedLifoQdiscTests
         qdisc.Enqueue(workload3);
         Assert.AreEqual(3, qdisc.BestEffortCount);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result3));
+        WorkerContext worker = new(id: 0);
+
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result3));
         Assert.AreEqual(id3, result3!.Id);
         Assert.AreEqual(2, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result2));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result2));
         Assert.AreEqual(id2, result2!.Id);
         Assert.AreEqual(1, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result1));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result1));
         Assert.AreEqual(id1, result1!.Id);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
 
-        Assert.IsFalse(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result0));
+        Assert.IsFalse(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result0));
         Assert.IsNull(result0);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
@@ -99,7 +101,7 @@ public class ConstrainedLifoQdiscTests
         Assert.AreEqual(1, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result4));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result4));
         Assert.AreEqual(id4, result4!.Id);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
@@ -136,7 +138,9 @@ public class ConstrainedLifoQdiscTests
         Assert.AreEqual(4, count);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        bool success = qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result4);
+        WorkerContext worker = new(id: 0);
+
+        bool success = qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result4);
         Assert.IsTrue(success);
         Assert.AreEqual(id4, result4!.Id);
         Assert.AreEqual(3, qdisc.BestEffortCount);
@@ -154,27 +158,27 @@ public class ConstrainedLifoQdiscTests
         Assert.AreEqual(4, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result6));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result6));
         Assert.AreEqual(id6, result6!.Id);
         Assert.AreEqual(3, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result5));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result5));
         Assert.AreEqual(id5, result5!.Id);
         Assert.AreEqual(2, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result3));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result3));
         Assert.AreEqual(id3, result3!.Id);
         Assert.AreEqual(1, qdisc.BestEffortCount);
         Assert.IsFalse(qdisc.IsEmpty);
 
-        Assert.IsTrue(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result2));
+        Assert.IsTrue(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result2));
         Assert.AreEqual(id2, result2!.Id);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
 
-        Assert.IsFalse(qdisc.TryDequeueInternal(0, false, out AbstractWorkloadBase? result7));
+        Assert.IsFalse(qdisc.TryDequeueInternal(worker, false, out AbstractWorkloadBase? result7));
         Assert.IsNull(result7);
         Assert.AreEqual(0, qdisc.BestEffortCount);
         Assert.IsTrue(qdisc.IsEmpty);
@@ -185,10 +189,4 @@ public class ConstrainedLifoQdiscTests
         AnonymousWorkloadImpl workload = new(Pass);
         return workload;
     }
-}
-
-file readonly struct DummyScheduler : INotifyWorkScheduled
-{
-    void INotifyWorkScheduled.DisposeRoot() => Pass();
-    void INotifyWorkScheduled.OnWorkScheduled() => Pass();
 }

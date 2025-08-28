@@ -36,7 +36,6 @@ public abstract class ClasslessQdisc<THandle>(THandle handle, IFilterManager fil
         if (TryBindWorkload(workload))
         {
             EnqueueDirectLocal(workload);
-            NotifyWorkScheduled();
         }
         else if (workload.IsCompleted)
         {

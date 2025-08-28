@@ -2,8 +2,8 @@
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Continuations;
 using Cash.Threading.Workloads.Queuing;
-using Cash.Threading.Workloads.DependencyInjection;
 using Cash.Diagnostic;
+using Cash.Threading.Workloads.Scheduling;
 
 namespace Cash.Threading.Workloads;
 
@@ -44,8 +44,6 @@ public abstract class AbstractWorkloadBase
     public virtual bool IsCompleted => Status.IsOneOf(CommonFlags.Completed);
 
     internal virtual bool ContinuationsInvoked => ReferenceEquals(Volatile.Read(in _continuation), s_workloadCompletionSentinel);
-
-    internal virtual void RegisterServiceProvider(IWorkloadServiceProvider serviceProvider) => Pass();
 
     /// <summary>
     /// Attempts to execute the action associated with this workload.
@@ -199,7 +197,7 @@ public abstract class AbstractWorkloadBase
     /// Marks the workload as finalized before it falls out of scope and executes any Task continuations that were scheduled for it.
     /// Also allows the workload to be returned to a pool, if applicable.
     /// </summary>
-    internal virtual void InternalRunContinuations(int workerId)
+    internal virtual void InternalRunContinuations(WorkerContext? worker)
     {
         DebugLog.WriteDiagnostic($"{this}: Running async continuations for workload.");
 
@@ -227,7 +225,7 @@ public abstract class AbstractWorkloadBase
                 return;
             case IWorkerLocalWorkloadContinuation workerLocalContinuation:
                 DebugLog.WriteDiagnostic($"{this}: Running worker-local workload continuation.");
-                workerLocalContinuation.Invoke(this, workerId);
+                workerLocalContinuation.Invoke(this, worker);
                 return;
             case List<object?> list:
             {
@@ -248,7 +246,7 @@ public abstract class AbstractWorkloadBase
                             wc.Invoke(this);
                             break;
                         case IWorkerLocalWorkloadContinuation wlc:
-                            wlc.Invoke(this, workerId);
+                            wlc.Invoke(this, worker);
                             break;
                         case null:
                             break;

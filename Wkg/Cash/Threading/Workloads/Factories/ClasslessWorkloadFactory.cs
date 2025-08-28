@@ -1,4 +1,5 @@
 ﻿using Cash.Threading.Workloads.Queuing.Classless;
+using Cash.Threading.Workloads.Scheduling;
 using Cash.Threading.Workloads.WorkloadTypes;
 
 namespace Cash.Threading.Workloads.Factories;
@@ -6,14 +7,14 @@ namespace Cash.Threading.Workloads.Factories;
 public class ClasslessWorkloadFactory<THandle> : AbstractClasslessWorkloadFactory<THandle>, IWorkloadFactory<THandle, ClasslessWorkloadFactory<THandle>>, IClasslessWorkloadFactory<THandle>
     where THandle : unmanaged
 {
-    internal ClasslessWorkloadFactory(IClassifyingQdisc<THandle> root, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options) 
-        : base(root, pool, options)
+    internal ClasslessWorkloadFactory(IWorkloadScheduler<THandle> scheduler, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options) 
+        : base(scheduler, pool, options)
     {
     }
 
-    public IClassifyingQdisc<THandle> Root => RootRef;
+    public new IClassifyingQdisc<THandle> Root => base.Root;
 
     static ClasslessWorkloadFactory<THandle> IWorkloadFactory<THandle, ClasslessWorkloadFactory<THandle>>
-        .Create(IClassifyingQdisc<THandle> root, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options) => 
-            new(root, pool, options);
+        .Create(IWorkloadScheduler<THandle> scheduler, AnonymousWorkloadPoolManager? pool, WorkloadContextOptions? options) => 
+            new(scheduler, pool, options);
 }
