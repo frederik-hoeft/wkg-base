@@ -12,7 +12,7 @@ using System.Text;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 
-internal class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>
+internal sealed class PriorityFifoFastQdisc<THandle> : ClassifyingQdisc<THandle>
     where THandle : unmanaged
 {
     private readonly ConcurrentBitmap _dataMap;

@@ -121,7 +121,7 @@ public class WorkloadSynchronizationContextTests
         mres.Wait();
     }
 
-    private class MySynchronizationContext : SynchronizationContext
+    private sealed class MySynchronizationContext : SynchronizationContext
     {
         public int State { get; set; }
 

@@ -17,6 +17,8 @@ using Cash.Threading.Workloads.Queuing.Classless.PriorityFifoFast;
 using Cash.Threading.Workloads.Queuing.Classification;
 using Cash.Threading.Workloads.Configuration.Dispatcher;
 using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
+using Samples;
+using BenchmarkDotNet.Running;
 
 //Stopwatch sw = Stopwatch.StartNew();
 //for (int i = 0; i < 1000; i++)
@@ -26,10 +28,10 @@ using Cash.Threading.Workloads.Queuing.Classless.ConstrainedLifo;
 //sw.Stop();
 //Log.WriteInfo($"SpinWait: {TimeSpan.FromTicks(sw.ElapsedTicks / 1000)}");
 
-//Environment.SetEnvironmentVariable("R_HOME", @"E:\software\R-4.3.2");
-//BenchmarkRunner.Run<CashVsTpl>();
-//Console.ReadLine();
-//return;
+Environment.SetEnvironmentVariable("R_HOME", @"E:\software\R-4.3.2");
+BenchmarkRunner.Run<Tests>();
+Console.ReadLine();
+return;
 
 //Tests tests = new()
 //{

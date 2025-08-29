@@ -7,7 +7,7 @@ using Cash.Threading.Workloads.Scheduling;
 
 namespace Cash.Threading.Workloads.Queuing.Classless.LatestOnly;
 
-internal class LatestOnlyQdisc<THandle>(THandle handle, IFilterManager filters) : ClassifyingQdisc<THandle>(handle, filters) where THandle : unmanaged
+internal sealed class LatestOnlyQdisc<THandle>(THandle handle, IFilterManager filters) : ClassifyingQdisc<THandle>(handle, filters) where THandle : unmanaged
 {
     private volatile AbstractWorkloadBase? _singleWorkload;
 
