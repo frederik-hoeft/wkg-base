@@ -3,6 +3,7 @@ using Cash.Threading.Workloads.Continuations;
 using Cash.Threading.Workloads.Exceptions;
 using Cash.Threading.Workloads.Queuing;
 using Cash.Threading.Workloads.Scheduling;
+using Cash.Threading.Workloads.Scheduling.Dispatchers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using CommonFlags = Cash.Threading.Workloads.WorkloadStatus.CommonFlags;
@@ -357,8 +358,11 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
     internal void SetContinuationForAwait(Action continuationAction)
     {
         Debug.Assert(continuationAction != null);
-        DebugLog.WriteDiagnostic($"{this}: Setting continuation for await.");
+        IWorkloadDispatcher? dispatcher = Dispatcher;
+        Debug.Assert(dispatcher != null, "Dispatcher must be set when awaiting a workload.");
+        dispatcher.CriticalNotifyCallerIsWaiting();
 
+        DebugLog.WriteDiagnostic($"{this}: Setting continuation for await.");
         IWorkloadContinuation wc = new WorkloadContinuationAction(continuationAction);
 
         // check if we need to capture the current synchronization context
@@ -418,7 +422,9 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
         {
             return true;
         }
-
+        IWorkloadDispatcher? dispatcher = Dispatcher;
+        Debug.Assert(dispatcher != null, "Dispatcher must be set when waiting on a workload.");
+        dispatcher.CriticalNotifyCallerIsWaiting();
         return SpinThenBlockingWait(millisecondsTimeout, token);
     }
 

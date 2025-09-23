@@ -23,6 +23,7 @@ internal sealed class WorkloadScheduler<THandle>(IClassifyingQdisc<THandle> root
 
     public void Schedule(THandle handle, AbstractWorkloadBase workload)
     {
+        workload.Dispatcher = dispatcher;
         IClassifyingQdisc<THandle> root = _root;
         if (root.Handle.Equals(handle))
         {
@@ -37,12 +38,14 @@ internal sealed class WorkloadScheduler<THandle>(IClassifyingQdisc<THandle> root
 
     public void Schedule(AbstractWorkloadBase workload)
     {
+        workload.Dispatcher = dispatcher;
         _root.Enqueue(workload);
         dispatcher.OnWorkScheduled();
     }
 
     public void Classify(object? state, AbstractWorkloadBase workload)
     {
+        workload.Dispatcher = dispatcher;
         if (!_root.TryEnqueue(state, workload))
         {
             WorkloadSchedulingException.ThrowClassificationFailed(state);

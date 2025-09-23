@@ -1,4 +1,5 @@
 ﻿using Cash.Threading.Workloads.Continuations;
+using Cash.Threading.Workloads.Scheduling.Dispatchers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
@@ -10,17 +11,21 @@ public partial class Workload
 
     public static ValueTask WhenAll(IEnumerable<AwaitableWorkload> workloads)
     {
-        AwaitableWorkload[] array = workloads.ToArray();
+        AwaitableWorkload[] array = [.. workloads];
         return WhenAllCore(new WhenAllAwaiterState(array.Length), array);
     }
 
-    public static ValueTask WhenAll(AwaitableWorkload[] workloads) => WhenAllCore(new WhenAllAwaiterState(workloads.Length), workloads);
+    public static ValueTask WhenAll(AwaitableWorkload[] workloads)
+    {
+        ArgumentNullException.ThrowIfNull(workloads);
+        return WhenAllCore(new WhenAllAwaiterState(workloads.Length), workloads);
+    }
 
     public static ValueTask WhenAll(params ReadOnlySpan<AwaitableWorkload> workloads) => WhenAllCore(new WhenAllAwaiterState(workloads.Length), workloads);
 
     private static ValueTask WhenAllCore(WhenAllAwaiterState state, ReadOnlySpan<AwaitableWorkload> workloads)
     {
-        for (int i = 0; i < workloads.Length; i++)
+        for (int i = 0; i < workloads.Length; ++i)
         {
             AwaitableWorkload workload = workloads[i];
             if (workload.IsCompleted)
@@ -29,7 +34,13 @@ public partial class Workload
             }
             else
             {
-                workload.AddOrRunInlineContinuationAction(state.ContinuationCallback, scheduleBeforeOthers: false);
+                bool scheduled = workload.AddOrRunInlineContinuationAction(state.ContinuationCallback, scheduleBeforeOthers: false);
+                if (scheduled)
+                {
+                    IWorkloadDispatcher? dispatcher = workload.Dispatcher;
+                    Debug.Assert(dispatcher is not null, "A scheduled workload should always have a dispatcher.");
+                    dispatcher.CriticalNotifyCallerIsWaiting();
+                }
             }
         }
         if (state.Count > 0)
@@ -71,12 +82,18 @@ public partial class Workload
 
     #region WhenAny
 
-    public static ValueTask<AwaitableWorkload> WhenAny(params AwaitableWorkload[] workloads) => WhenAnyCore(workloads);
+    public static ValueTask<AwaitableWorkload> WhenAny(params AwaitableWorkload[] workloads)
+    {
+        ArgumentNullException.ThrowIfNull(workloads);
+        return WhenAnyCore(workloads);
+    }
 
     private static ValueTask<AwaitableWorkload> WhenAnyCore(AwaitableWorkload[] workloads)
     {
+        // would deadlock if we allowed zero-length arrays, since nothing would ever complete
+        ArgumentOutOfRangeException.ThrowIfZero(workloads.Length);
         WhenAnyAwaiterState state = new(workloads);
-        for (int i = 0; i < workloads.Length; i++)
+        for (int i = 0; i < workloads.Length; ++i)
         {
             AwaitableWorkload workload = workloads[i];
             if (state.IsCompleted)
@@ -88,7 +105,7 @@ public partial class Workload
                 state.Invoke(workload);
                 return ValueTask.FromResult(workload);
             }
-            workload.AddOrRunInlineContinuationAction(state, scheduleBeforeOthers: false);
+            bool scheduled = workload.AddOrRunInlineContinuationAction(state, scheduleBeforeOthers: false);
             if (state.IsCompleted)
             {
                 // it could be that after we added the continuation, the state was completed
@@ -97,6 +114,12 @@ public partial class Workload
                 // this will safely no-op
                 workload.RemoveContinuation(state);
                 break;
+            }
+            if (scheduled)
+            {
+                IWorkloadDispatcher? dispatcher = workload.Dispatcher;
+                Debug.Assert(dispatcher is not null, "A scheduled workload should always have a dispatcher.");
+                dispatcher.CriticalNotifyCallerIsWaiting();
             }
         }
         return new ValueTask<AwaitableWorkload>(state._tcs.Task);

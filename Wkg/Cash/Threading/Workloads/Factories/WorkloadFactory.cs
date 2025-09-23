@@ -9,7 +9,7 @@ public abstract class WorkloadFactory<THandle> : IDisposable where THandle : unm
 {
     private bool _disposedValue;
 
-    protected IWorkloadScheduler<THandle> Scheduler { get; }
+    internal protected IWorkloadScheduler<THandle> Scheduler { get; }
 
     private protected AnonymousWorkloadPoolManager? Pool { get; }
 

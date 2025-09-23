@@ -4,6 +4,7 @@ using Cash.Threading.Workloads.Continuations;
 using Cash.Threading.Workloads.Queuing;
 using Cash.Diagnostic;
 using Cash.Threading.Workloads.Scheduling;
+using Cash.Threading.Workloads.Scheduling.Dispatchers;
 
 namespace Cash.Threading.Workloads;
 
@@ -17,7 +18,9 @@ public abstract class AbstractWorkloadBase
 {
     private protected uint _status;
     // this state may be used by qdiscs to store additional scheduling information
-    internal volatile QueuingStateNode? SchedulerState;
+    private QueuingStateNode? _queuingState;
+
+    public ref QueuingStateNode? QueuingStateRef => ref _queuingState;
 
     // continuations
     private protected static readonly object s_workloadCompletionSentinel = new();
@@ -27,6 +30,8 @@ public abstract class AbstractWorkloadBase
     {
         _status = status;
     }
+
+    internal IWorkloadDispatcher? Dispatcher { get; set; }
 
     /// <summary>
     /// Gets the unique identifier of this workload.
@@ -72,7 +77,13 @@ public abstract class AbstractWorkloadBase
     /// <inheritdoc/>
     public override string ToString() => $"{GetType().Name} {Id} ({Status})";
 
-    internal virtual void AddOrRunInlineContinuationAction(object continuation, bool scheduleBeforeOthers = false)
+    /// <summary>
+    /// Attempts to add the specified continuation action to the workload. If the workload is already completed, the continuation action is executed inline.
+    /// </summary>
+    /// <param name="continuation">The continuation action to add or execute.</param>
+    /// <param name="scheduleBeforeOthers">Whether to schedule the continuation before other continuations that were already added.</param>
+    /// <returns><see langword="true"/> if the continuation was successfully added; <see langword="false"/> if the workload is already completed and the continuation was executed inline.</returns>
+    internal virtual bool AddOrRunInlineContinuationAction(object continuation, bool scheduleBeforeOthers = false)
     {
         DebugLog.WriteDiagnostic($"{this}: Attempting to add or run inline continuation.");
         if (!TryAddContinuation(continuation, scheduleBeforeOthers))
@@ -92,7 +103,9 @@ public abstract class AbstractWorkloadBase
                 DebugLog.WriteException(ex);
                 throw ex;
             }
+            return false;
         }
+        return true;
     }
 
     internal virtual void AddOrRunContinuation(IWorkloadContinuation continuation, bool scheduleBeforeOthers = false, bool runInline = false)

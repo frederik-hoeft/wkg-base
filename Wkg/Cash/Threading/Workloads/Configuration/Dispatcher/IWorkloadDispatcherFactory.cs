@@ -18,6 +18,7 @@ public abstract class WorkloadDispatcherFactory : IWorkloadDispatcherFactory
 public sealed class BoundedWorkloadDispatcherFactory : WorkloadDispatcherFactory
 {
     private int _maxConcurrency = Environment.ProcessorCount;
+    private bool _allowRecursiveScheduling;
 
     public BoundedWorkloadDispatcherFactory UseMaximumConcurrency(int maxConcurrency)
     {
@@ -26,5 +27,11 @@ public sealed class BoundedWorkloadDispatcherFactory : WorkloadDispatcherFactory
         return this;
     }
 
-    protected override IWorkloadDispatcher Create(IQdisc root) => new BoundedWorkloadDispatcher(root, _maxConcurrency);
+    public BoundedWorkloadDispatcherFactory AllowRecursiveScheduling(bool allow = true)
+    {
+        _allowRecursiveScheduling = allow;
+        return this;
+    }
+
+    protected override IWorkloadDispatcher Create(IQdisc root) => new BoundedWorkloadDispatcher(root, _maxConcurrency, _allowRecursiveScheduling);
 }
