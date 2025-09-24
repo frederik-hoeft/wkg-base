@@ -26,16 +26,27 @@ public sealed class WorkerContext
     }
 
     public bool TryGetData<TOwner, TData>([DisallowNull] TOwner owner, [NotNullWhen(true)] out TData? value)
-        where TOwner : class, IWorkerDataOwner => TryGetData(owner.InstanceHash, out value);
+        where TOwner : class, IWorkerDataOwner
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        return TryGetData(owner.InstanceHash, out value);
+    }
 
     public bool HasData(int key) => _data.ContainsKey(key);
 
-    public bool HasData<TOwner>([DisallowNull] TOwner owner) where TOwner : class, IWorkerDataOwner => HasData(owner.InstanceHash);
+    public bool HasData<TOwner>([DisallowNull] TOwner owner) where TOwner : class, IWorkerDataOwner
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        return HasData(owner.InstanceHash);
+    }
 
     public void SetData<T>(int key, [DisallowNull] T value) => _data[key] = value;
 
-    public void SetData<TOwner, TData>([DisallowNull] TOwner owner, [DisallowNull] TData value) where TOwner : class, IWorkerDataOwner =>
+    public void SetData<TOwner, TData>([DisallowNull] TOwner owner, [DisallowNull] TData value) where TOwner : class, IWorkerDataOwner
+    {
+        ArgumentNullException.ThrowIfNull(owner);
         SetData(owner.InstanceHash, value);
+    }
 
     internal void Clear() => _data.Clear();
 

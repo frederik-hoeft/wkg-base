@@ -40,15 +40,15 @@ internal sealed class BoundedWorkloadDispatcher : IWorkloadDispatcher
 
     public bool AllowRecursiveScheduling { get; }
 
-    void IWorkloadDispatcher.CriticalNotifyCallerIsWaiting()
+    void IWorkloadDispatcher.CriticalNotifyWillSuspend()
     {
-        // if the caller is a worker, and it 
+        // if the caller is a worker itself, we may run into dependency issues of workers waiting for workloads that will never be executed because all workers are waiting
         if (_al_workerContext.Value is { } workerContext)
         {
             if (!AllowRecursiveScheduling)
             {
                 DebugLog.WriteError($"Detected recursive scheduling from worker {workerContext.WorkerId}, but recursive scheduling is disabled. This is not allowed and may lead to deadlocks.");
-                throw new WorkloadSchedulingException("Recursive scheduling is not allowed in this dispatcher. To enable recursive scheduling, set the AllowRecursiveScheduling property to true.");
+                WorkloadSchedulingException.ThrowRecursiveSchedulingProhibitedByDispatcher(this, workerContext);
             }
             if (!workerContext.HasData(s_forceResignCallerKey))
             {

@@ -1,4 +1,6 @@
 ﻿using Cash.Threading.Workloads.Queuing.Classless;
+using Cash.Threading.Workloads.Scheduling;
+using Cash.Threading.Workloads.Scheduling.Dispatchers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
@@ -55,6 +57,11 @@ public partial class WorkloadSchedulingException
             Throw($"Failed to find a route to the qdisc. The routing path has already been completed (leaf already set to '{currentLeaf.Handle}').");
         }
     }
+
+    [DoesNotReturn]
+    [StackTraceHidden]
+    internal static void ThrowRecursiveSchedulingProhibitedByDispatcher(IWorkloadDispatcher dispatcher, WorkerContext workerContext) =>
+        Throw($"Recursive scheduling is not allowed by this dispatcher of type '{dispatcher.GetType().Name}'. A workload is attempting to await another workload being executed on the same dispatcher, which does not support recursive scheduling. This can lead to deadlocks and other issues. WorkerContext: {workerContext}");
 
     [DoesNotReturn]
     [StackTraceHidden]

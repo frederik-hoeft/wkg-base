@@ -360,7 +360,7 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
         Debug.Assert(continuationAction != null);
         IWorkloadDispatcher? dispatcher = Dispatcher;
         Debug.Assert(dispatcher != null, "Dispatcher must be set when awaiting a workload.");
-        dispatcher.CriticalNotifyCallerIsWaiting();
+        dispatcher.CriticalNotifyWillSuspend();
 
         DebugLog.WriteDiagnostic($"{this}: Setting continuation for await.");
         IWorkloadContinuation wc = new WorkloadContinuationAction(continuationAction);
@@ -424,7 +424,7 @@ public abstract class AwaitableWorkload : AbstractWorkloadBase
         }
         IWorkloadDispatcher? dispatcher = Dispatcher;
         Debug.Assert(dispatcher != null, "Dispatcher must be set when waiting on a workload.");
-        dispatcher.CriticalNotifyCallerIsWaiting();
+        dispatcher.CriticalNotifyWillSuspend();
         return SpinThenBlockingWait(millisecondsTimeout, token);
     }
 

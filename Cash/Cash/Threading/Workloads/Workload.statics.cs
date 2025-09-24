@@ -39,7 +39,7 @@ public partial class Workload
                 {
                     IWorkloadDispatcher? dispatcher = workload.Dispatcher;
                     Debug.Assert(dispatcher is not null, "A scheduled workload should always have a dispatcher.");
-                    dispatcher.CriticalNotifyCallerIsWaiting();
+                    dispatcher.CriticalNotifyWillSuspend();
                 }
             }
         }
@@ -119,7 +119,7 @@ public partial class Workload
             {
                 IWorkloadDispatcher? dispatcher = workload.Dispatcher;
                 Debug.Assert(dispatcher is not null, "A scheduled workload should always have a dispatcher.");
-                dispatcher.CriticalNotifyCallerIsWaiting();
+                dispatcher.CriticalNotifyWillSuspend();
             }
         }
         return new ValueTask<AwaitableWorkload>(state._tcs.Task);

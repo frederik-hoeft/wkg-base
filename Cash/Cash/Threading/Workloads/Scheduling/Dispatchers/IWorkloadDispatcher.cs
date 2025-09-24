@@ -4,5 +4,5 @@ public interface IWorkloadDispatcher : IDisposable
 {
     internal protected void OnWorkScheduled();
 
-    internal protected void CriticalNotifyCallerIsWaiting();
+    internal protected void CriticalNotifyWillSuspend();
 }
